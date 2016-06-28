@@ -64,18 +64,15 @@ func (m *Menu) drawItem(item int, active bool) {
 	tbPrint(0, 1+item, color, coldef, str)
 }
 
-// Render Menu
-func (m *Menu) Render(flush func()) {
-	curItem := 0
-	nitems := len(m.items)
-	dfl := ""
-
+func (m *Menu) draw() (curItem int) {
+	var dfl string
+	var nitems = len(m.items)
 	m.drawPrompt()
 
-	// draw initial menu
 	if m.boundString != nil {
 		dfl = *m.boundString
 	}
+
 	for i := 0; i < nitems; i++ {
 		if m.items[i].Value == dfl || (dfl == "" && i == 0) {
 			m.drawItem(i, true)
@@ -84,10 +81,15 @@ func (m *Menu) Render(flush func()) {
 			m.drawItem(i, false)
 		}
 	}
+	return
+}
 
+// Render Menu
+func (m *Menu) Render(flush func()) {
+
+	curItem := m.draw()
 	flush()
 
-	// get input, draw/re draw menu, items
 EventLoop:
 	for {
 		ev := termbox.PollEvent()
@@ -107,7 +109,7 @@ EventLoop:
 					m.drawItem(curItem, true)
 				}
 			case termbox.KeyArrowDown:
-				if curItem < nitems-1 {
+				if curItem < len(m.items)-1 {
 					m.drawItem(curItem, false)
 					curItem = curItem + 1
 					m.drawItem(curItem, true)

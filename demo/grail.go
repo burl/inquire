@@ -17,6 +17,7 @@ func widgetTest() {
 
 	name = os.Getenv("LOGNAME")
 	quest = "grail"
+	green = true
 
 	inquire.Query().
 		Input(&name, "What is your name", nil).
