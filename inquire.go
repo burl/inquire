@@ -100,6 +100,9 @@ func (inq *Questions) Exec() {
 	doTermInit()
 	defer doTermClose()
 	for _, w := range inq.widgets {
+		if !w.DoWhen() {
+			continue
+		}
 		termbox.Clear(coldef, coldef)
 		/*
 			cols, _ := termbox.Size()

@@ -27,15 +27,62 @@ type WBase struct {
 	row      int
 	hintCol  int
 	rightCol int
+	when     func() bool
+}
+
+// Renderable interface
+type Renderable interface {
+	Render(flush func())
+	Lines() int
+	SetRow(int)
+	DoValidate() string
+	DoWhen() bool
+}
+
+// Lines - how tall is this widget?
+func (w *WBase) Lines() int {
+	return w.lines
 }
 
 // Init - initialize any widget
 func (w *WBase) Init() {
 }
 
-// Lines - how tall is this widget?
-func (w *WBase) Lines() int {
-	return w.lines
+// When - set when
+func (w *WBase) When(when func() bool) *WBase {
+	w.when = when
+	return w
+}
+
+// WhenEqual - shortcut for oft-used when logic
+func (w *WBase) WhenEqual(a, b interface{}) *WBase {
+	w.When(func() bool {
+		switch v := a.(type) {
+		case *string:
+			a = *v
+		case *bool:
+			a = *v
+		}
+		switch v := b.(type) {
+		case *string:
+			b = *v
+		case *bool:
+			b = *v
+		}
+		if a == b {
+			return true
+		}
+		return false
+	})
+	return w
+}
+
+// DoWhen - return result of when callback, or true
+func (w *WBase) DoWhen() bool {
+	if w.when != nil {
+		return w.when()
+	}
+	return true
 }
 
 // SetRow - set row
@@ -46,14 +93,6 @@ func (w *WBase) SetRow(row int) {
 // DoValidate validation routine
 func (w *WBase) DoValidate() (msg string) {
 	return ""
-}
-
-// Renderable interface
-type Renderable interface {
-	Render(flush func())
-	Lines() int
-	SetRow(int)
-	DoValidate() string
 }
 
 func (w *WBase) drawPrompt() {
