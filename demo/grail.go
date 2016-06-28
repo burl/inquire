@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/burl/inquire"
 	"github.com/burl/inquire/widget"
@@ -11,25 +12,37 @@ import (
 func widgetTest() {
 
 	var (
-		name, quest               string
+		name, quest, weight       string
 		red, green, blue, proceed bool
 	)
 
-	name = os.Getenv("LOGNAME")
+	name = "Sir Lancelot"
 	quest = "grail"
 	green = true
 
 	inquire.Query().
 		Input(&name, "What is your name", nil).
-		Menu(&quest, "What is your quest", func(m *widget.Menu) {
-			m.Item("shrub", "find a shrubbery")
-			m.Item("grail", "find the grail")
-			m.Item("bridge", "find the bridge")
+		Menu(&quest, "What is your quest", func(w *widget.Menu) {
+			w.Hint("use arrow keys, pick one")
+			w.Item("shrub", "find a shrubbery")
+			w.Item("grail", "find the grail")
+			w.Item("nuts", "find coconuts")
 		}).
-		Select("what are your favorite colors", func(s *widget.Select) {
-			s.Item(&red, "red")
-			s.Item(&blue, "blue")
-			s.Item(&green, "green")
+		Input(&weight, "What is the weight of an unladen swallow", func(w *widget.Input) {
+			w.WhenEqual(&quest, "nuts")
+			w.Valid(func(value string) string {
+				n, err := strconv.Atoi(value)
+				if err != nil || n < 1 {
+					return "not good, you need to enter a number"
+				}
+				return ""
+			})
+		}).
+		Select("what are your favorite colors", func(w *widget.Select) {
+			w.Hint("use arrow/space, select multiple")
+			w.Item(&red, "red")
+			w.Item(&blue, "blue")
+			w.Item(&green, "green")
 		}).
 		YesNo(&proceed, "Continue").
 		Exec()

@@ -116,6 +116,7 @@ EventLoop:
 				}
 			}
 		}
+		m.ClearHint()
 		flush()
 	}
 
