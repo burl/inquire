@@ -44,6 +44,18 @@ func (w *WBase) Lines() int {
 	return w.lines
 }
 
+// Hint - set the hint for the display
+func (w *WBase) Hint(hint string) *WBase {
+	w.hint = hint
+	return w
+}
+
+// ClearHint - remove hint from widget display
+func (w *WBase) ClearHint() *WBase {
+	tbClearToEOL(w.hintCol, 0)
+	return w
+}
+
 // Init - initialize any widget
 func (w *WBase) Init() {
 }

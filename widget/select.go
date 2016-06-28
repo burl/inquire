@@ -144,6 +144,7 @@ EventLoop:
 				}
 			}
 		}
+		w.ClearHint()
 		flush()
 	}
 

@@ -10,8 +10,7 @@ import (
 const coldef = termbox.ColorDefault
 
 func doTermInit() {
-	termbox.OwnConsole = false
-	err := termbox.Init()
+	err := termbox.ViewPortInit()
 	if err != nil {
 		panic(err)
 	}
@@ -112,10 +111,10 @@ func (inq *Questions) Exec() {
 				}
 			}
 		*/
-		row := termbox.SetLinesOut(w.Lines())
+		row := termbox.ViewPortSetHeight(w.Lines())
 		w.SetRow(row)
 		w.Render(func() {
-			termbox.FlushRect(0, w.Lines(), row-1)
+			termbox.ViewPortFlush(0, w.Lines(), row-1)
 		})
 		fmt.Printf("\033[%d;1H", row+1)
 	}

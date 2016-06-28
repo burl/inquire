@@ -23,11 +23,12 @@ func widgetTest() {
 	inquire.Query().
 		Input(&name, "What is your name", nil).
 		Menu(&quest, "What is your quest", func(w *widget.Menu) {
+			w.Hint("use arrow keys, pick one")
 			w.Item("shrub", "find a shrubbery")
 			w.Item("grail", "find the grail")
 			w.Item("nuts", "find coconuts")
 		}).
-		Input(&weight, "What is the air speed of an unladen swallow", func(w *widget.Input) {
+		Input(&weight, "What is the weight of an unladen swallow", func(w *widget.Input) {
 			w.WhenEqual(&quest, "nuts")
 			w.Valid(func(value string) string {
 				n, err := strconv.Atoi(value)
@@ -38,6 +39,7 @@ func widgetTest() {
 			})
 		}).
 		Select("what are your favorite colors", func(w *widget.Select) {
+			w.Hint("use arrow/space, select multiple")
 			w.Item(&red, "red")
 			w.Item(&blue, "blue")
 			w.Item(&green, "green")
