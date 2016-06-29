@@ -1,7 +1,7 @@
 # inquire
 > A collection of common interactive command line user interfaces
 
-inquire attempts to replicate the Node package [inquirer](https://www.npmjs.com/package/inquirer).
+inquire attempts to replicate the look and feel of Node package [inquirer](https://www.npmjs.com/package/inquirer) for Go.
 
 ## WIP
 
