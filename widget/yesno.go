@@ -40,7 +40,7 @@ func (w *YesNo) Render(flush func()) {
 
 	// draw a "phony cursor"
 	drawCursor := func(x, y int) {
-		tbPrint(x, y, termbox.ColorWhite, termbox.ColorWhite, "\x20")
+		tbPrint(x, y, termbox.ColorDefault|termbox.AttrReverse, termbox.ColorDefault, "\x20")
 	}
 
 	draw := func() {
