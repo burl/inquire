@@ -8,7 +8,7 @@ inquire attempts to replicate the look and feel of the Node package [inquirer](h
 This is a work in progress.  See [demo/grail.go](https://github.com/burl/inquire/blob/master/demo/grail.go)
 for a demonstration of using the API.
 
-![Demo](https://github.com/burl/inquire/blob/master/data/inquire-demo.gif)
+![Demo](https://github.com/burl/inquire/blob/master/data/inquire-demo-1.gif)
 
 ### API
 
