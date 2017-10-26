@@ -62,6 +62,7 @@ func widgetTest() {
 
 	fmt.Printf("name  : %s\n", name)
 	fmt.Printf("quest : %s\n", quest)
+	fmt.Printf("colors: red:%v, green:%v, blue:%v\n", red, green, blue)
 }
 
 func main() {
