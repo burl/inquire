@@ -1,13 +1,19 @@
 package widget
 
-import "github.com/burl/termbox-go"
+import (
+	"strings"
+
+	"github.com/burl/termbox-go"
+)
 
 // StrBuf is the basis for an input field widget
 type StrBuf struct {
-	Buf string
-	Pos int
-	Row int
-	Col int
+	Buf       string
+	Pos       int
+	Row       int
+	Col       int
+	isMasked  bool
+	inputMask rune
 }
 
 // NewStrBuf - create a new StrBuf at x,y in the screen
@@ -20,6 +26,12 @@ func NewStrBuf(x, y int) *StrBuf {
 	}
 }
 
+// MaskInput - mask input (echo a mask char instead of actual char)
+func (b *StrBuf) MaskInput(ch rune) {
+	b.isMasked = true
+	b.inputMask = ch
+}
+
 // Draw the buffer (not so performant.. could be optimized) - and draw
 // a "cursor" by showing inverse...
 //
@@ -29,10 +41,18 @@ func NewStrBuf(x, y int) *StrBuf {
 // fine on most terminals and works with white backgrounds, etc.
 //
 func (b *StrBuf) Draw() {
-	tbPrint(b.Col+1, b.Row, coldef, coldef, b.Buf+"\x20\x20")
+	buf := b.Buf
+	if b.isMasked {
+		buf = strings.Repeat(string(b.inputMask), len(buf))
+	}
+	tbPrint(b.Col+1, b.Row, coldef, coldef, buf+"\x20\x20")
 	ch := '\x20'
 	if b.Pos < len(b.Buf) {
-		ch = rune(b.Buf[b.Pos])
+		if b.isMasked {
+			ch = '*'
+		} else {
+			ch = rune(b.Buf[b.Pos])
+		}
 	}
 	termbox.SetCell(b.Pos+b.Col+1, 0, ch, termbox.AttrReverse, coldef)
 }
