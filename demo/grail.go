@@ -63,6 +63,7 @@ func widgetTest() {
 		os.Exit(1)
 	}
 
+	fmt.Printf("\nHere are the answers:\n---------------------\n")
 	fmt.Printf("name  : %s\n", name)
 	fmt.Printf("quest : %s\n", quest)
 	fmt.Printf("colors: red:%v, green:%v, blue:%v\n", red, green, blue)
