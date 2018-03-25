@@ -49,7 +49,7 @@ func (b *StrBuf) Draw() {
 	ch := '\x20'
 	if b.Pos < len(b.Buf) {
 		if b.isMasked {
-			ch = '*'
+			ch = b.inputMask
 		} else {
 			ch = rune(b.Buf[b.Pos])
 		}
