@@ -13,8 +13,8 @@ func widgetTest() {
 
 	// vars that will receive the answers to the questions
 	var (
-		name, quest, weight       string
-		red, green, blue, proceed bool
+		name, quest, weight, passwd string
+		red, green, blue, proceed   bool
 	)
 
 	name = "Sir Lancelot" // if you want a default value
@@ -52,6 +52,9 @@ func widgetTest() {
 			w.Item(&blue, "blue")   // toggle the value of the referenced
 			w.Item(&green, "green") // boolean variable
 		}).
+		Input(&passwd, "What is your secret", func(w *widget.Input) {
+			w.MaskInput() // or, w.MaskInput('*')
+		}).
 		YesNo(&proceed, "Continue"). // simple yes/no
 		Exec()                       // render all the questions.
 
@@ -62,6 +65,8 @@ func widgetTest() {
 
 	fmt.Printf("name  : %s\n", name)
 	fmt.Printf("quest : %s\n", quest)
+	fmt.Printf("colors: red:%v, green:%v, blue:%v\n", red, green, blue)
+	fmt.Printf("secret: %s (shhh!)\n", passwd)
 }
 
 func main() {

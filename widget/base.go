@@ -20,14 +20,16 @@ const (
 
 // WBase base widget
 type WBase struct {
-	name     string
-	prompt   string
-	hint     string
-	lines    int
-	row      int
-	hintCol  int
-	rightCol int
-	when     func() bool
+	name      string
+	prompt    string
+	hint      string
+	lines     int
+	row       int
+	hintCol   int
+	rightCol  int
+	when      func() bool
+	isMasked  bool
+	inputMask rune
 }
 
 // Renderable interface
@@ -126,7 +128,11 @@ func (w *WBase) drawResult(str string) {
 	for c := w.hintCol + 1; c < cols; c++ {
 		var ch rune
 		if stri < strl {
-			ch = rune(str[stri])
+			if w.isMasked {
+				ch = w.inputMask
+			} else {
+				ch = rune(str[stri])
+			}
 		} else {
 			ch = '\x20'
 		}

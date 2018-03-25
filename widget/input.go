@@ -57,6 +57,17 @@ func (w *Input) DoValidate() (msg string) {
 	return
 }
 
+// MaskInput - cause input to be masked (i.e. passwords)
+func (w *Input) MaskInput(ch ...rune) *Input {
+	if len(ch) < 1 {
+		w.inputMask = '•'
+	} else {
+		w.inputMask = ch[0]
+	}
+	w.isMasked = true
+	return w
+}
+
 // Render WProtoT widget
 func (w *Input) Render(flush func()) {
 	if w.defaultValue == "" && w.bound != nil {
@@ -68,6 +79,9 @@ func (w *Input) Render(flush func()) {
 	w.drawPrompt()
 
 	buf := NewStrBuf(w.rightCol-1, 0)
+	if w.isMasked {
+		buf.MaskInput(w.inputMask)
+	}
 	buf.Draw()
 	flush()
 
