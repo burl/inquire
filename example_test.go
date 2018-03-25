@@ -1,6 +1,8 @@
 package inquire_test
 
 import (
+	"os"
+
 	"github.com/burl/inquire"
 	"github.com/burl/inquire/widget"
 )
@@ -77,6 +79,19 @@ func Example_valid() {
 				// return an empty string if the data is valid
 				return ""
 			})
+		}).
+		Exec()
+}
+
+func Example_login() {
+	// Example of asking for a password (no terminal echo)
+	user := os.Getenv("LOGNAME")
+	pass := ""
+
+	inquire.Query().
+		Input(&user, "Username", nil).
+		Input(&pass, "Password", func(w *widget.Input) {
+			w.MaskInput() // Or pass a custom mask char: w.MaskInput('*')
 		}).
 		Exec()
 }
