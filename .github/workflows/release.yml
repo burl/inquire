@@ -1,4 +1,4 @@
-# Release on merge to master: run full gate, bump v2 patch tag, publish notes.
+# Release on merge to master: run full gate, semver-bump tag from commits, publish notes.
 # No binary assets — release body is a short generated API guide.
 
 name: release

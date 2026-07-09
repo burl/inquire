@@ -87,7 +87,7 @@ Conditional prompts use `When` with `widget.WhenEqual` predicates.
 | Context | Keys |
 |---------|------|
 | **All** | Ctrl+C — abort session |
-| **Input** | Arrows, Home/End, Backspace/Delete; Ctrl+A/E/K/D/W; Ctrl+B/F (left/right); Emacs navigation |
+| **Input** | Arrows, Home/End, Backspace/Delete; Ctrl+A/E/K/D/W; Ctrl+B/F (left/right); Tab completes when `Complete` is set |
 | **YesNo** | ←/→, ↑/↓, y/n, Space (toggle), Enter (confirm) |
 | **Menu** | ↑/↓, ←/→ (move); Space/Enter (confirm); Ctrl+P/N (up/down) |
 | **Select** | ↑/↓ (move); Space (toggle item); a (select all); i (invert); Enter (confirm) |
@@ -172,9 +172,9 @@ task build:all   # cross-compile demos for linux+darwin (amd64+arm64)
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
 | [`ci.yml`](.github/workflows/ci.yml) | PRs to `master` / `develop` | `task check` (ubuntu + macos) + `task build:all` |
-| [`release.yml`](.github/workflows/release.yml) | Push to `master` | Same gate, then tags `v2.0.N` and publishes a short API guide |
+| [`release.yml`](.github/workflows/release.yml) | Push to `master` | Same gate, then semver-tags from conventional commits and publishes a short API guide |
 
-**To ship a release:** merge a green PR into `master`. The release workflow runs automatically (`v2.0.0` first, then `v2.0.1`, …). That tag is what pkg.go.dev and `go get` use — distinct from the `/v2` in the import path (see [Migration from v1](#migration-from-v1)).
+**To ship a release:** merge a green PR into `master`. The release workflow runs automatically: [`scripts/next-version.sh`](scripts/next-version.sh) inspects commits since the last `v*` tag and bumps the version — breaking change → major (`v3.0.0`), `feat` → minor (`v2.1.0`), anything else → patch (`v2.0.1`). The first release on a fresh tree is `v2.0.0`. That tag is what pkg.go.dev and `go get` use — distinct from the `/v2` in the import path (see [Migration from v1](#migration-from-v1)).
 
 Enable branch protection on `master` and require the **ci** jobs (`check`, `build`) before merge.
 
@@ -186,7 +186,7 @@ v1 used module path `github.com/burl/inquire` (termbox, global state, different 
 |---|-------------|------------------|
 | Module | `github.com/burl/inquire` | `github.com/burl/inquire/v2` |
 | Import | `import "github.com/burl/inquire"` | `import "github.com/burl/inquire/v2"` |
-| Tags | `v0.x` on the old tree | `v2.0.x` on this tree |
+| Tags | `v0.x` on the old tree | `v2.x.x` on this tree |
 
 See [docs/MIGRATION.md](docs/MIGRATION.md) for API changes.
 
