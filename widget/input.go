@@ -1,151 +1,174 @@
 package widget
 
-import "github.com/burl/termbox-go"
+import (
+	"context"
 
-// TODO:
-//  * support "delete" (right now, its just backspace)
-//  * support CTRL+K, kill to end of line
-//  * forward/backward one word
-//
+	"github.com/burl/inquire/v2/internal/termui"
+)
 
-// ------------------------------------------------------------- Input Widget --
-
-// Input an input widget, single line/string of text
+// Input is a single-line text prompt.
 type Input struct {
-	WBase
-	defaultValue string
-	Value        string
-	bound        *string
-	validator    func(str string) (msg string)
+	Base
+	value    *string
+	prompt   string
+	hint     string
+	validate func(string) string
+	mask     rune
 }
 
-// WInput - create new input widget
-func WInput(prompt, dfl string) *Input {
-	w := &Input{
-		WBase:        WBase{prompt: prompt, lines: 2, hint: dfl},
-		defaultValue: dfl,
+// NewInput constructs an Input bound to value.
+func NewInput(value *string, prompt string) *Input {
+	w := &Input{value: value, prompt: prompt}
+	if value != nil && *value != "" {
+		w.hint = *value
 	}
-	w.Init()
 	return w
 }
 
-// InputStringVar - create new input widget
-func InputStringVar(value *string, prompt, dfl string) *Input {
-	w := WInput(prompt, dfl)
-	w.bound = value
+// Hint sets hint text shown beside the prompt.
+func (w *Input) Hint(h string) *Input {
+	w.hint = h
 	return w
 }
 
-// Default - set default value
-func (w *Input) Default(val string) *Input {
-	w.defaultValue = val
-	w.hint = val
+// Valid registers a validation callback; non-empty return is shown as an error.
+func (w *Input) Valid(fn func(string) string) *Input {
+	w.validate = fn
 	return w
 }
 
-// Valid - validation for input
-func (w *Input) Valid(validator func(str string) (msg string)) *Input {
-	w.validator = validator
-	return w
-}
-
-// DoValidate validation routine
-func (w *Input) DoValidate() (msg string) {
-	if w.validator != nil {
-		msg = w.validator(w.Value)
-	}
-	return
-}
-
-// MaskInput - cause input to be masked (i.e. passwords)
+// MaskInput masks typed characters (password entry). Default mask is •.
 func (w *Input) MaskInput(ch ...rune) *Input {
-	if len(ch) < 1 {
-		w.inputMask = '•'
+	if len(ch) == 0 {
+		w.mask = '•'
 	} else {
-		w.inputMask = ch[0]
+		w.mask = ch[0]
 	}
-	w.isMasked = true
 	return w
 }
 
-// Render WProtoT widget
-func (w *Input) Render(flush func()) {
-	if w.defaultValue == "" && w.bound != nil {
-		w.defaultValue = *w.bound
-		w.hint = *w.bound
+// When registers a skip predicate.
+func (w *Input) When(fn func() bool) *Input {
+	w.Base.When(fn)
+	return w
+}
+
+// Run interactively collects text input.
+func (w *Input) Run(ctx context.Context, scr *termui.Screen) error {
+	const lines = 2
+	band, err := scr.OpenBand(ctx, lines)
+	if err != nil {
+		return err
 	}
 
-	// call this before NewStrBuf() because we need the column offset
-	w.drawPrompt()
-
-	buf := NewStrBuf(w.rightCol-1, 0)
-	if w.isMasked {
-		buf.MaskInput(w.inputMask)
+	defaultVal := ""
+	if w.value != nil {
+		defaultVal = *w.value
 	}
-	buf.Draw()
-	flush()
+	hint := w.hint
+	if hint == "" {
+		hint = defaultVal
+	}
 
-	hasError := false
-EventLoop:
-	for {
-		ev := termbox.PollEvent()
-		if hasError {
-			w.ErrorClear()
-			hasError = false
+	ed := NewEditor()
+	if w.mask != 0 {
+		ed.SetMask(w.mask)
+	}
+
+	var valueCol int
+	var errMsg string
+	showHint := hint != ""
+
+	draw := func() {
+		band.Clear()
+		h := hint
+		if !showHint {
+			h = ""
 		}
-		switch ev.Type {
-		case termbox.EventKey:
-			if ev.Key == 0 {
-				buf.Insert(ev.Ch)
-			} else {
-				switch ev.Key {
-				case termbox.KeySpace:
-					buf.Insert('\x20')
-				case termbox.KeyTab:
-					buf.Insert('\x20')
-					buf.Insert('\x20')
-					buf.Insert('\x20')
-					buf.Insert('\x20')
-				case 5: // ^E
-					buf.End()
-				case 1: // ^A
-					buf.Beginning()
-				case termbox.KeyArrowUp:
-				case termbox.KeyArrowDown:
-				case termbox.KeyArrowLeft, 02: // 02 == Ctrl+B
-					buf.Left()
-				case termbox.KeyArrowRight, 06: // 06 == Ctrl+F
-					buf.Right()
-				//TODO: backspace and delete / Ctrl+D, etc. are different.. make it so...
-				case termbox.KeyDelete, termbox.KeyBackspace, termbox.KeyBackspace2:
-					buf.Delete()
-				case 3:
-					dieFromCtlc()
-				case 13:
-					if buf.Buf == "" && w.defaultValue != "" {
-						buf.SetValue(w.defaultValue)
-						flush()
-					}
-					w.Value = buf.Buf
-					msg := w.DoValidate()
-					if msg == "" {
-						if w.bound != nil {
-							*w.bound = buf.Buf
-						}
-						break EventLoop
-					} else {
-						w.Value = ""
-						w.ErrorMessage(msg)
-						buf.End()
-						hasError = true
-						flush()
-					}
+		valueCol = drawPromptRow(band, 0, w.prompt, h)
+		ed.Draw(band, 0, valueCol)
+		if errMsg != "" {
+			drawErrorRow(band, 1, errMsg)
+		}
+		_ = band.Flush()
+	}
+	draw()
+
+	for {
+		ev, err := PollKey(ctx, scr, band, draw)
+		if err != nil {
+			return err
+		}
+		if ev.Type != termui.EventKey {
+			continue
+		}
+
+		if errMsg != "" {
+			errMsg = ""
+		}
+		showHint = false
+
+		switch ev.Key {
+		case termui.KeyCtrlC:
+			return termui.ErrInterrupted
+		case termui.KeyEnter:
+			val := ed.String()
+			if val == "" && defaultVal != "" {
+				val = defaultVal
+				ed.SetString(val)
+				draw()
+			}
+			if w.validate != nil {
+				if msg := w.validate(val); msg != "" {
+					errMsg = msg
+					draw()
+					continue
 				}
 			}
+			if w.value != nil {
+				*w.value = val
+			}
+			band.Clear()
+			drawSettledRow(band, 0, w.prompt, val, w.mask != 0, w.mask)
+			return band.FinalizeStatic(1)
+		case termui.KeyBackspace:
+			ed.Backspace()
+			draw()
+		case termui.KeyDelete:
+			ed.DeleteForward()
+			draw()
+		case termui.KeyLeft:
+			ed.Left()
+			draw()
+		case termui.KeyRight:
+			ed.Right()
+			draw()
+		case termui.KeyHome, termui.KeyCtrlA:
+			ed.Home()
+			draw()
+		case termui.KeyEnd, termui.KeyCtrlE:
+			ed.End()
+			draw()
+		case termui.KeyCtrlK:
+			ed.KillToEnd()
+			draw()
+		case termui.KeyCtrlD:
+			ed.DeleteForward()
+			draw()
+		case termui.KeyCtrlW:
+			ed.KillWordBackward()
+			draw()
+		case termui.KeyTab:
+			for range 4 {
+				ed.Insert(' ')
+			}
+			draw()
+		case termui.KeySpace:
+			ed.Insert(' ')
+			draw()
+		case termui.KeyRune:
+			ed.Insert(ev.Rune)
+			draw()
 		}
-		flush()
 	}
-
-	w.drawResult(buf.Buf)
-	flush()
 }

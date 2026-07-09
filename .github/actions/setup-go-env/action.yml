@@ -1,0 +1,37 @@
+name: Setup Go environment
+description: |
+  Install Go (from go.mod), Task, and golangci-lint for inquire CI.
+  Call after actions/checkout.
+
+inputs:
+  go-version-file:
+    description: Path to go.mod for Go version
+    required: false
+    default: go.mod
+  task-version:
+    description: Task version tag
+    required: false
+    default: v3.52.0
+  golangci-lint-version:
+    description: golangci-lint version tag
+    required: false
+    default: v2.12.2
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: ${{ inputs.go-version-file }}
+        cache: true
+
+    - name: Install Task and golangci-lint
+      shell: bash
+      run: |
+        set -euo pipefail
+        go install "github.com/go-task/task/v3/cmd/task@${{ inputs.task-version }}"
+        go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ inputs.golangci-lint-version }}"
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+        task --version
+        golangci-lint version

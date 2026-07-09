@@ -1,154 +1,155 @@
-// Package inquire provides a set of widgets for creating simple
-// line-oriented terminal user interfaces.
+// Package inquire provides line-oriented interactive CLI prompts that render
+// inline at the current cursor, leaving answered questions as static scrollback.
 //
-// User interfaces consist of line-oriented "widgets" of the following types:
-//     YesNo  - prompt for yes/no answer
-//     Input  - single line text input with optional default
-//     Menu   - vertical menu of choices, chose one
-//     Select - vertical menu of checkboxes, chose many
+// # TTY requirements
 //
-// Widgets may be easily declared and bound to variables to receive
-// input from the user.
+// Run requires both stdin and stdout to be terminals. Piping either stream
+// returns [ErrNotTerminal]. Stderr may be redirected.
 //
-// Optional validation may be tied to widgets
-// and validation error text will be displayed in the (always available
-// and otherwise blank) line below each widget.
+// # Interrupts
 //
-// Widgets may also be conditionally skipped based on conditions that
-// msut be met in a 'When' callback.
+// Ctrl+C aborts the entire session and returns [ErrInterrupted]. Answers bound
+// before the interrupt are kept; later prompts are not run.
 //
-// inquire uses a modified termbox-go library that is made to render
-// part of the termbox buffer into a region of lines as a "viewport,"
-// without taking over the entire screen.
-//
+// See https://pkg.go.dev/github.com/burl/inquire/v2 for API reference.
 package inquire
 
 import (
-	"fmt"
+	"context"
+	"errors"
+	"os"
 
-	"github.com/burl/inquire/widget"
-	"github.com/burl/termbox-go"
+	"github.com/burl/inquire/v2/internal/termui"
+	"github.com/burl/inquire/v2/widget"
 )
 
-// Questions is an opaque type that represents a set of widgets for interacting
-// with the user.
-type Questions struct {
-	widgets    []widget.Renderable
-	lastMenu   *widget.Menu
-	lastSelect *widget.Select
+var (
+	// ErrNotTerminal is returned when stdin or stdout is not a terminal.
+	ErrNotTerminal = errors.New("inquire: stdin/stdout is not a terminal")
+	// ErrInterrupted is returned when the user presses Ctrl+C.
+	ErrInterrupted = errors.New("inquire: interrupted")
+)
+
+// Query builds an interactive prompt session.
+func Query(opts ...Option) *Session {
+	s := &Session{
+		in:  os.Stdin,
+		out: os.Stdout,
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(s)
+		}
+	}
+	return s
 }
 
-const coldef = termbox.ColorDefault
+// Session is a fluent builder for interactive prompts.
+type Session struct {
+	in           *os.File
+	out          *os.File
+	err          error
+	widgets      []widget.Runner
+	colorEnabled *bool
+}
 
-func doTermInit() {
-	err := termbox.ViewPortInit()
+// Input adds a text prompt bound to value.
+func (s *Session) Input(value *string, prompt string, more func(*widget.Input)) *Session {
+	w := widget.NewInput(value, prompt)
+	if more != nil {
+		more(w)
+	}
+	s.widgets = append(s.widgets, w)
+	return s
+}
+
+// YesNo adds a yes/no prompt bound to value.
+func (s *Session) YesNo(value *bool, prompt string, more func(*widget.YesNo)) *Session {
+	w := widget.NewYesNo(value, prompt)
+	if more != nil {
+		more(w)
+	}
+	s.widgets = append(s.widgets, w)
+	return s
+}
+
+// Menu adds a single-select menu bound to value.
+func (s *Session) Menu(value *string, prompt string, more func(*widget.Menu)) *Session {
+	w := widget.NewMenu(value, prompt)
+	if more != nil {
+		more(w)
+	}
+	s.widgets = append(s.widgets, w)
+	return s
+}
+
+// Select adds a multi-select checkbox group.
+func (s *Session) Select(prompt string, more func(*widget.Select)) *Session {
+	w := widget.NewSelect(prompt)
+	if more != nil {
+		more(w)
+	}
+	s.widgets = append(s.widgets, w)
+	return s
+}
+
+// Note adds a non-interactive message; the user presses Enter to continue.
+func (s *Session) Note(text string, more func(*widget.Note)) *Session {
+	w := widget.NewNote(text)
+	if more != nil {
+		more(w)
+	}
+	s.widgets = append(s.widgets, w)
+	return s
+}
+
+// AnyKey adds a prompt that continues on any key (except Ctrl+C).
+func (s *Session) AnyKey(message string, more func(*widget.AnyKey)) *Session {
+	w := widget.NewAnyKey(message)
+	if more != nil {
+		more(w)
+	}
+	s.widgets = append(s.widgets, w)
+	return s
+}
+
+// Run executes the prompt session.
+func (s *Session) Run(ctx context.Context) error {
+	if s.err != nil {
+		return s.err
+	}
+
+	var scrOpts []termui.ScreenOption
+	if s.colorEnabled != nil {
+		scrOpts = append(scrOpts, termui.WithColor(*s.colorEnabled))
+	}
+
+	scr, err := termui.OpenScreen(s.in, s.out, scrOpts...)
 	if err != nil {
-		panic(err)
+		if errors.Is(err, termui.ErrNotTerminal) {
+			return ErrNotTerminal
+		}
+		return err
 	}
-	termbox.SetInputMode(termbox.InputAlt | termbox.InputMouse)
-	termbox.SetOutputMode(termbox.Output256)
-}
+	defer func() { _ = scr.Close() }()
 
-func doTermClose() {
-	termbox.Close()
-}
-
-// Query creates a new Questions type
-func Query() *Questions {
-	inq := &Questions{
-		widgets: []widget.Renderable{},
-	}
-	return inq
-}
-
-// YesNo adds a YesNo widget to a set of questions.  value will be
-// set to true for yes and false for no, based on user input.
-func (inq *Questions) YesNo(value *bool, prompt string) *Questions {
-	w := widget.YesNoBoolVar(value, prompt)
-	inq.widgets = append(inq.widgets, w)
-	return inq
-}
-
-// Input adds an Input widget to a set of questions.  The argument 'value'
-// should point to a string var, which will be assigned the result of the
-// user interaction with the Input widget.  If the initial content of 'value'
-// is non-empty, then it will be used as the default answer.
-//
-// A callback function may be passed as the final argument in order to
-// register validation callbacks or set up conditional inqury.  If this
-// is not needed, then ``nil`` should be passed.
-func (inq *Questions) Input(value *string, prompt string, more func(*widget.Input)) *Questions {
-	w := widget.InputStringVar(value, prompt, "")
-	if more != nil {
-		more(w)
-	}
-	inq.widgets = append(inq.widgets, w)
-	return inq
-}
-
-// Menu displays a veritcal menu of choices for the user to select one of.
-// The final argument may be nil or a function that will be called back
-// with the menu widget for further configuration. The value string pointed
-// to by the first argument will receive the value of the "tag" string
-// for the menu item chosen
-func (inq *Questions) Menu(value *string, prompt string, more func(*widget.Menu)) *Questions {
-	w := widget.MenuStringVar(value, prompt)
-	if more != nil {
-		more(w)
-	}
-	inq.lastMenu = w
-	inq.widgets = append(inq.widgets, w)
-	return inq
-}
-
-// MenuItem may be used to append a menu item to the most recently added
-// 'Menu' widget.
-func (inq *Questions) MenuItem(tag, prompt string) *Questions {
-	if inq.lastMenu == nil {
-		panic("no previous menu defined, can not add menu item for: " + tag + ", " + prompt)
-	}
-	inq.lastMenu.Item(tag, prompt)
-	return inq
-}
-
-// Select displays a vertical menu of "checkbox" type entries for the user
-// to select zero or more of.  The variables bound to these entries must
-// be bool vars and are associated with each entry.
-func (inq *Questions) Select(prompt string, more func(*widget.Select)) *Questions {
-	w := widget.SelectGroup(prompt)
-	if more != nil {
-		more(w)
-	}
-	inq.lastSelect = w
-	inq.widgets = append(inq.widgets, w)
-	return inq
-}
-
-// SelectItem may be used to append a select menu item to the most recently
-// declared Select widget.
-func (inq *Questions) SelectItem(value *bool, prompt string) *Questions {
-	if inq.lastSelect == nil {
-		panic("no previous select defined, can not add select item for: " + prompt)
-	}
-	inq.lastSelect.Item(value, prompt)
-	return inq
-}
-
-// Exec will execute the event loop, prompting the user for input
-// for each question defined
-func (inq *Questions) Exec() {
-	doTermInit()
-	defer doTermClose()
-	for _, w := range inq.widgets {
+	for _, w := range s.widgets {
 		if !w.DoWhen() {
 			continue
 		}
-		termbox.Clear(coldef, coldef)
-		row := termbox.ViewPortSetHeight(w.Lines())
-		w.SetRow(row)
-		w.Render(func() {
-			termbox.ViewPortFlush(0, w.Lines(), row-1)
-		})
-		fmt.Printf("\033[%d;1H", row+1)
+		if err := w.Run(ctx, scr); err != nil {
+			return mapRunError(err)
+		}
 	}
+	return nil
+}
+
+func mapRunError(err error) error {
+	if errors.Is(err, termui.ErrInterrupted) {
+		return ErrInterrupted
+	}
+	if errors.Is(err, context.Canceled) {
+		return ErrInterrupted
+	}
+	return err
 }

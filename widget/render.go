@@ -1,44 +1,73 @@
 package widget
 
 import (
-	"fmt"
+	"strings"
 
-	"github.com/burl/termbox-go"
+	"github.com/burl/inquire/v2/internal/termui"
+	"github.com/mattn/go-runewidth"
 )
 
-const coldef = termbox.ColorDefault
+var (
+	stylePrompt   = termui.Style{Fg: termui.ColorGreen, Bold: true}
+	styleQuestion = termui.Style{Bold: true}
+	styleHint     = termui.Style{Faint: true}
+	styleAnswer   = termui.Style{Fg: termui.ColorCyan}
+	styleError    = termui.Style{Fg: termui.ColorRed}
+	styleActive   = termui.Style{Fg: termui.ColorCyan}
+	styleCursor   = termui.Style{Rev: true}
+)
 
-func doTermInit() {
-	err := termbox.ViewPortInit()
-	if err != nil {
-		panic(err)
+const (
+	charChevronRight = "❯"
+	charCircle       = "◯"
+	charCircleFilled = "◉"
+)
+
+// drawPromptRow paints "? prompt? (hint)" and returns the column for the value.
+func drawPromptRow(band *termui.Band, y int, prompt, hint string) int {
+	band.WriteString(0, y, "? ", stylePrompt)
+	x := 2
+	x += writeStyled(band, x, y, prompt+"?", styleQuestion)
+	if hint != "" {
+		x += writeStyled(band, x, y, " ("+hint+")", styleHint)
 	}
-	termbox.SetInputMode(termbox.InputAlt | termbox.InputMouse)
+	return x + 1
 }
 
-func doTermClose() {
-	termbox.Close()
+// drawSettledRow paints "✔ prompt? answer" on one line.
+func drawSettledRow(band *termui.Band, y int, prompt, answer string, masked bool, mask rune) {
+	band.WriteString(0, y, "✔ ", stylePrompt)
+	x := 2
+	x += writeStyled(band, x, y, prompt+"? ", termui.Style{})
+	display := answer
+	if masked && mask != 0 {
+		var b strings.Builder
+		for _, r := range answer {
+			_ = r
+			b.WriteRune(mask)
+		}
+		display = b.String()
+	}
+	_ = writeStyled(band, x, y, display, styleAnswer)
 }
 
-// Render the "ui"
-func Render(widgets ...Renderable) {
-	doTermInit()
-	defer doTermClose()
-	for _, w := range widgets {
-		termbox.Clear(coldef, coldef)
-		/*
-			cols, _ := termbox.Size()
-			for r := 0; r < w.Lines(); r++ {
-				for c := 0; c < cols; c++ {
-					termbox.SetCell(c, r, '.', coldef, coldef)
-				}
-			}
-		*/
-		row := termbox.ViewPortSetHeight(w.Lines())
-		w.SetRow(row)
-		w.Render(func() {
-			termbox.ViewPortFlush(0, w.Lines(), row-1)
-		})
-		fmt.Printf("\033[%d;1H", row+1)
-	}
+// drawErrorRow paints a validation error on row y.
+func drawErrorRow(band *termui.Band, y int, msg string) {
+	band.WriteString(0, y, "✖ ", styleError)
+	band.WriteString(2, y, "error: "+msg, termui.Style{})
+}
+
+func writeStyled(band *termui.Band, x, y int, s string, st termui.Style) int {
+	band.WriteString(x, y, s, st)
+	return runewidth.StringWidth(s)
+}
+
+const (
+	footerMenu   = "↑/↓ move · ←/→ move · space/enter confirm"
+	footerSelect = "↑/↓ move · space toggle · a all · i invert · enter confirm"
+)
+
+// drawFooter paints a faint hint row.
+func drawFooter(band *termui.Band, y int, msg string) {
+	band.WriteString(0, y, msg, styleHint)
 }

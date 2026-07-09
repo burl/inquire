@@ -1,75 +1,93 @@
+// Grail demo: Monty Python quest through every inquire widget.
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
 
-	"github.com/burl/inquire"
-	"github.com/burl/inquire/widget"
+	"github.com/burl/inquire/v2"
+	"github.com/burl/inquire/v2/widget"
 )
 
-func widgetTest() {
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 
-	// vars that will receive the answers to the questions
 	var (
 		name, quest, weight, passwd string
 		red, green, blue, proceed   bool
 	)
 
-	name = "Sir Lancelot" // if you want a default value
-	quest = "grail"       // for any of the widgets, then
-	green = true          // just assign values to the vars
+	name = "Sir Lancelot"
+	quest = "grail"
+	green = true
 
-	inquire.Query().
-		// if you just have a plain old question, pass nil as the final arg
+	err := inquire.Query().
+		Note("You enter the realm of Monty Python and approach the Bridge of Death.", nil).
+		AnyKey("A knight in black armour blocks your path", func(w *widget.AnyKey) {
+			w.Hint("press any key to face the Bridge Keeper")
+		}).
 		Input(&name, "What is your name", nil).
 		Menu(&quest, "What is your quest", func(w *widget.Menu) {
-			// if you want to do a bit more, pass a callback - each kind
-			// of widget will pass a type into the callback where you can...
-			w.Hint("use arrow keys, pick one")  // set up custom hint text
-			w.Item("shrub", "find a shrubbery") // set up the values and prompts
-			w.Item("grail", "find the grail")   // the &quest var will be set
-			w.Item("nuts", "find coconuts")     // to one of: shrub, grail or nuts
+			w.Hint("use arrow keys, pick one")
+			w.Item("shrub", "find a shrubbery")
+			w.Item("grail", "find the grail")
+			w.Item("nuts", "find coconuts")
 		}).
 		Input(&weight, "What is the weight of an unladen swallow", func(w *widget.Input) {
-			// this question will only be shown when the value of quest is "nuts"
-			w.WhenEqual(&quest, "nuts") // there is also a generic form
+			w.When(widget.WhenEqual(&quest, "nuts"))
 			w.Valid(func(value string) string {
-				// and things can be validated ...
 				n, err := strconv.Atoi(value)
 				if err != nil || n < 1 {
-					// invalid input should return a non-empty error message
 					return "not good, you need to enter a number"
 				}
-				// if the data is valid, return an empty string
 				return ""
 			})
 		}).
 		Select("what are your favorite colors", func(w *widget.Select) {
 			w.Hint("use arrow/space, select multiple")
-			w.Item(&red, "red")     // the select or "checkbox" widget will
-			w.Item(&blue, "blue")   // toggle the value of the referenced
-			w.Item(&green, "green") // boolean variable
+			w.Item(&red, "red")
+			w.Item(&blue, "blue")
+			w.Item(&green, "green")
 		}).
-		Input(&passwd, "What is your secret", func(w *widget.Input) {
-			w.MaskInput() // or, w.MaskInput('*')
+		Note("If you fail the next question, you shall be cast into the Gorge of Eternal Peril.", nil).
+		Input(&passwd, "What is the capital of Assyria", func(w *widget.Input) {
+			w.MaskInput()
+			w.Hint("shhh")
 		}).
-		YesNo(&proceed, "Continue"). // simple yes/no
-		Exec()                       // render all the questions.
+		AnyKey("The Bridge Keeper regards your answers with grave suspicion", func(w *widget.AnyKey) {
+			w.Hint("press any key for judgment")
+		}).
+		YesNo(&proceed, "May you cross the bridge", func(w *widget.YesNo) {
+			w.Hint("Yes/No")
+		}).
+		Run(ctx)
+
+	if err != nil {
+		if errors.Is(err, inquire.ErrInterrupted) {
+			fmt.Fprintln(os.Stderr, "\ninterrupted")
+			os.Exit(130)
+		}
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
 
 	if !proceed {
-		fmt.Println("aborted.")
+		fmt.Println("Auuuuuuuugh! (cast into the gorge)")
 		os.Exit(1)
 	}
 
 	fmt.Printf("\nHere are the answers:\n---------------------\n")
 	fmt.Printf("name  : %s\n", name)
 	fmt.Printf("quest : %s\n", quest)
+	if quest == "nuts" {
+		fmt.Printf("weight: %s\n", weight)
+	}
 	fmt.Printf("colors: red:%v, green:%v, blue:%v\n", red, green, blue)
 	fmt.Printf("secret: %s (shhh!)\n", passwd)
-}
-
-func main() {
-	widgetTest()
+	fmt.Println("\nRight. Off you go.")
 }

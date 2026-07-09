@@ -1,21 +1,32 @@
+# EditorConfig is awesome: https://EditorConfig.org
 
+# top-most EditorConfig file
 root = true
 
-; Unix-style newlines with a newline ending every file
 [*]
 end_of_line = lf
-indent_size = 4
-indent_style = space
+trim_trailing_whitespace = true
 insert_final_newline = true
-trim_trailing_whitespace  = true
-insert_final_newline = true
+
+[*.{js,json,go,yaml,yml}]
 charset = utf-8
 
-; Golang
-[*.go]
+[*.yaml,*.yml]
+indent_style = space
+indent_size = 2
+
+[*.json]
+indent_size = 2
+indent_style = space
+
+[*.js]
+indent_size = 4
+indent_style = space
+
+[Makefile,*.mk]
 indent_style = tab
 indent_size = 4
 
-; YAML
-[*.{yaml,yml}]
-indent_size = 2
+[*.go]
+indent_style = tab
+indent_size = 4

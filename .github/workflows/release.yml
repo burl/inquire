@@ -1,0 +1,65 @@
+# Release on merge to master: run full gate, bump v2 patch tag, publish notes.
+# No binary assets — release body is a short generated API guide.
+
+name: release
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-master
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Check
+        run: task check
+
+      - name: Build all platforms
+        run: task build:all
+
+      - name: Compute version
+        id: ver
+        run: |
+          set -euo pipefail
+          TAG="$(scripts/next-version.sh)"
+          VER="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "Next release: ${TAG}"
+
+      - name: Render release notes
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          sed -e "s|\${TAG}|${TAG}|g" \
+              -e "s|\${REPO}|${REPO}|g" \
+              .github/release/API_GUIDE.md.tmpl > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+       - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.ver.outputs.tag }}"
+          gh release create "$TAG" \
+            --title "inquire ${{ steps.ver.outputs.version }}" \
+            --notes-file RELEASE_NOTES.md

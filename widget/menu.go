@@ -1,129 +1,135 @@
 package widget
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/burl/termbox-go"
+	"github.com/burl/inquire/v2/internal/termui"
 )
 
-// MenuItemT - a menu entry
-type MenuItemT struct {
-	Value string
-	Name  string
+type menuItem struct {
+	tag  string
+	name string
 }
 
-// Menu a menu widget
+// Menu is a vertical single-select prompt.
 type Menu struct {
-	WBase
-	boundString *string
-	items       []MenuItemT
+	Base
+	value  *string
+	prompt string
+	hint   string
+	items  []menuItem
 }
 
-// MenuItem - return item
-func MenuItem(value, name string) MenuItemT {
-	if value == "" {
-		value = name
-	}
-	return MenuItemT{value, name}
+// NewMenu constructs a Menu bound to value.
+func NewMenu(value *string, prompt string) *Menu {
+	return &Menu{value: value, prompt: prompt}
 }
 
-// NewMenu - create new input widget
-func NewMenu(prompt string, items []MenuItemT) *Menu {
-	w := &Menu{
-		WBase: WBase{prompt: prompt, lines: 2 + len(items)},
-		items: items,
-	}
-	w.Init()
+// Hint sets hint text shown beside the prompt.
+func (w *Menu) Hint(h string) *Menu {
+	w.hint = h
 	return w
 }
 
-// MenuStringVar - return menu widget that will set a string var with a value
-func MenuStringVar(bound *string, prompt string, items ...MenuItemT) *Menu {
-	w := NewMenu(prompt, items)
-	w.boundString = bound
+// When registers a skip predicate.
+func (w *Menu) When(fn func() bool) *Menu {
+	w.Base.When(fn)
 	return w
 }
 
-// Item - add an item to the menu
-func (m *Menu) Item(name, prompt string) *Menu {
-	m.lines = m.lines + 1
-	m.items = append(m.items, MenuItem(name, prompt))
-	return m
+// Item appends a menu choice. tag is stored in value; name is displayed.
+func (w *Menu) Item(tag, name string) {
+	if tag == "" {
+		tag = name
+	}
+	w.items = append(w.items, menuItem{tag: tag, name: name})
 }
 
-func (m *Menu) drawItem(item int, active bool) {
-	cursor := " "
-	if active {
-		cursor = string(CharChevronRight)
+func (w *Menu) defaultIndex() int {
+	if w.value == nil || *w.value == "" {
+		return 0
 	}
-	str := fmt.Sprintf("%s %s", cursor, m.items[item].Name)
-	color := coldef
-	if active {
-		color = termbox.ColorCyan
-	}
-	tbPrint(0, 1+item, color, coldef, str)
-}
-
-func (m *Menu) draw() (curItem int) {
-	var dfl string
-	var nitems = len(m.items)
-	m.drawPrompt()
-
-	if m.boundString != nil {
-		dfl = *m.boundString
-	}
-
-	for i := 0; i < nitems; i++ {
-		if m.items[i].Value == dfl || (dfl == "" && i == 0) {
-			m.drawItem(i, true)
-			curItem = i
-		} else {
-			m.drawItem(i, false)
+	for i, it := range w.items {
+		if it.tag == *w.value {
+			return i
 		}
 	}
-	return
+	return 0
 }
 
-// Render Menu
-func (m *Menu) Render(flush func()) {
+func (w *Menu) drawItems(band *termui.Band, cur int) {
+	for i, it := range w.items {
+		prefix := "  "
+		st := termui.Style{}
+		if i == cur {
+			prefix = charChevronRight + " "
+			st = styleActive
+		}
+		band.WriteString(0, 1+i, prefix+it.name, st)
+	}
+}
 
-	curItem := m.draw()
-	flush()
+// Run interactively collects a menu selection.
+func (w *Menu) Run(ctx context.Context, scr *termui.Screen) error {
+	if len(w.items) == 0 {
+		return fmt.Errorf("inquire: menu has no items")
+	}
 
-EventLoop:
+	lines := 1 + len(w.items) + 1 // prompt + items + footer
+	band, err := scr.OpenBand(ctx, lines)
+	if err != nil {
+		return err
+	}
+
+	cur := w.defaultIndex()
+	showHint := w.hint != ""
+
+	draw := func() {
+		band.Clear()
+		h := w.hint
+		if !showHint {
+			h = ""
+		}
+		_ = drawPromptRow(band, 0, w.prompt, h)
+		w.drawItems(band, cur)
+		drawFooter(band, lines-1, footerMenu)
+		_ = band.Flush()
+	}
+	draw()
+
 	for {
-		ev := termbox.PollEvent()
-		switch ev.Type {
-		case termbox.EventKey:
-			switch ev.Key {
-			case 3:
-				dieFromCtlc()
-			case 13:
-				break EventLoop
-			case termbox.KeySpace, 9, termbox.KeyArrowLeft, termbox.KeyArrowRight:
-				m.drawItem(curItem, true)
-			case termbox.KeyArrowUp:
-				if curItem > 0 {
-					m.drawItem(curItem, false)
-					curItem = curItem - 1
-					m.drawItem(curItem, true)
-				}
-			case termbox.KeyArrowDown:
-				if curItem < len(m.items)-1 {
-					m.drawItem(curItem, false)
-					curItem = curItem + 1
-					m.drawItem(curItem, true)
-				}
-			}
+		ev, err := PollKey(ctx, scr, band, draw)
+		if err != nil {
+			return err
 		}
-		m.ClearHint()
-		flush()
-	}
+		if ev.Type != termui.EventKey {
+			continue
+		}
+		showHint = false
 
-	if m.boundString != nil {
-		*m.boundString = m.items[curItem].Value
+		switch ev.Key {
+		case termui.KeyCtrlC:
+			return termui.ErrInterrupted
+		case termui.KeyEnter, termui.KeySpace:
+			if w.value != nil {
+				*w.value = w.items[cur].tag
+			}
+			band.Clear()
+			drawSettledRow(band, 0, w.prompt, w.items[cur].name, false, 0)
+			return band.FinalizeStatic(1)
+		case termui.KeyUp, termui.KeyLeft:
+			if cur > 0 {
+				cur--
+				draw()
+			}
+		case termui.KeyDown, termui.KeyRight:
+			if cur < len(w.items)-1 {
+				cur++
+				draw()
+			}
+		case termui.KeyTab:
+			draw()
+		}
 	}
-
-	m.drawResult(m.items[curItem].Name)
-	flush()
 }
