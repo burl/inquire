@@ -87,7 +87,7 @@ Conditional prompts use `When` with `widget.WhenEqual` predicates.
 | Context | Keys |
 |---------|------|
 | **All** | Ctrl+C — abort session |
-| **Input** | Arrows, Home/End, Backspace/Delete; Ctrl+A/E/K/D/W; Ctrl+B/F (left/right); Emacs navigation |
+| **Input** | Arrows, Home/End, Backspace/Delete; Ctrl+A/E/K/D/W; Ctrl+B/F (left/right); Tab completes when `Complete` is set |
 | **YesNo** | ←/→, ↑/↓, y/n, Space (toggle), Enter (confirm) |
 | **Menu** | ↑/↓, ←/→ (move); Space/Enter (confirm); Ctrl+P/N (up/down) |
 | **Select** | ↑/↓ (move); Space (toggle item); a (select all); i (invert); Enter (confirm) |

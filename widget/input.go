@@ -12,8 +12,9 @@ type Input struct {
 	value    *string
 	prompt   string
 	hint     string
-	validate func(string) string
-	mask     rune
+	validate  func(string) string
+	complete  func(prefix string) []string
+	mask      rune
 }
 
 // NewInput constructs an Input bound to value.
@@ -34,6 +35,13 @@ func (w *Input) Hint(h string) *Input {
 // Valid registers a validation callback; non-empty return is shown as an error.
 func (w *Input) Valid(fn func(string) string) *Input {
 	w.validate = fn
+	return w
+}
+
+// Complete registers tab-completion candidates for the text before the cursor.
+// Ignored when MaskInput is set. Use [CompleteFrom] for a static candidate list.
+func (w *Input) Complete(fn func(prefix string) []string) *Input {
+	w.complete = fn
 	return w
 }
 
@@ -77,6 +85,8 @@ func (w *Input) Run(ctx context.Context, scr *termui.Screen) error {
 
 	var valueCol int
 	var errMsg string
+	var completeHint string
+	var tabState tabCompleteState
 	showHint := hint != ""
 
 	draw := func() {
@@ -87,8 +97,11 @@ func (w *Input) Run(ctx context.Context, scr *termui.Screen) error {
 		}
 		valueCol = drawPromptRow(band, 0, w.prompt, h)
 		ed.Draw(band, 0, valueCol)
-		if errMsg != "" {
+		switch {
+		case errMsg != "":
 			drawErrorRow(band, 1, errMsg)
+		case completeHint != "":
+			drawHintRow(band, 1, completeHint)
 		}
 		_ = band.Flush()
 	}
@@ -105,6 +118,9 @@ func (w *Input) Run(ctx context.Context, scr *termui.Screen) error {
 
 		if errMsg != "" {
 			errMsg = ""
+		}
+		if completeHint != "" {
+			completeHint = ""
 		}
 		showHint = false
 
@@ -132,6 +148,7 @@ func (w *Input) Run(ctx context.Context, scr *termui.Screen) error {
 			drawSettledRow(band, 0, w.prompt, val, w.mask != 0, w.mask)
 			return band.FinalizeStatic(1)
 		case termui.KeyBackspace:
+			tabState.reset()
 			ed.Backspace()
 			draw()
 		case termui.KeyDelete:
@@ -159,14 +176,25 @@ func (w *Input) Run(ctx context.Context, scr *termui.Screen) error {
 			ed.KillWordBackward()
 			draw()
 		case termui.KeyTab:
-			for range 4 {
-				ed.Insert(' ')
+			if w.mask != 0 {
+				// ignore Tab on masked inputs (no literal spaces, no completion)
+				draw()
+				break
+			}
+			if w.complete != nil {
+				completeHint = applyTabCompletion(ed, w.complete, &tabState)
+			} else {
+				tabState.reset()
+				for range 4 {
+					ed.Insert(' ')
+				}
 			}
 			draw()
 		case termui.KeySpace:
 			ed.Insert(' ')
 			draw()
 		case termui.KeyRune:
+			tabState.reset()
 			ed.Insert(ev.Rune)
 			draw()
 		}
