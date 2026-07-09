@@ -21,10 +21,8 @@ func writeString(w io.Writer, s string) error {
 
 func hideCursor(w io.Writer) error { return writeString(w, csi+"?25l") }
 func showCursor(w io.Writer) error { return writeString(w, csi+"?25h") }
-func clearToEOL(w io.Writer) error { return writeString(w, csi+"K") }
 func clearLine(w io.Writer) error  { return writeString(w, csi+"2K") }
 func clearToEOS(w io.Writer) error { return writeString(w, csi+"J") }
-func cr(w io.Writer) error         { return writeString(w, "\r") }
 func newline(w io.Writer) error    { return writeString(w, "\n") }
 
 // cup moves to 1-based row,col (absolute).
@@ -38,30 +36,6 @@ func cuu(w io.Writer, n int) error {
 		return nil
 	}
 	return writeString(w, fmt.Sprintf("%s%dA", csi, n))
-}
-
-// cud moves cursor down n lines.
-func cud(w io.Writer, n int) error {
-	if n <= 0 {
-		return nil
-	}
-	return writeString(w, fmt.Sprintf("%s%dB", csi, n))
-}
-
-// cub moves cursor back n columns.
-func cub(w io.Writer, n int) error {
-	if n <= 0 {
-		return nil
-	}
-	return writeString(w, fmt.Sprintf("%s%dD", csi, n))
-}
-
-// cuf moves cursor forward n columns.
-func cuf(w io.Writer, n int) error {
-	if n <= 0 {
-		return nil
-	}
-	return writeString(w, fmt.Sprintf("%s%dC", csi, n))
 }
 
 // sgr0 resets attributes.

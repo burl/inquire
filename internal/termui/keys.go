@@ -2,7 +2,6 @@ package termui
 
 import (
 	"bytes"
-	"io"
 	"unicode/utf8"
 )
 
@@ -266,28 +265,4 @@ func parseCursorReport(b []byte) (row, col int, rest []byte, ok bool) {
 	return row, col, rest, true
 }
 
-// readSome is a small helper for tests.
-func readAllEvents(r io.Reader) ([]Event, error) {
-	var d decoder
-	buf := make([]byte, 256)
-	var out []Event
-	for {
-		n, err := r.Read(buf)
-		if n > 0 {
-			d.feed(buf[:n])
-			for {
-				ev, ok := d.next()
-				if !ok {
-					break
-				}
-				out = append(out, ev)
-			}
-		}
-		if err == io.EOF {
-			return out, nil
-		}
-		if err != nil {
-			return out, err
-		}
-	}
-}
+

@@ -321,12 +321,11 @@ func (s *Screen) OpenBand(ctx context.Context, lines int) (*Band, error) {
 		return nil, err
 	}
 
-	row, col, err := s.CursorPos(ctx)
+	row, _, err := s.CursorPos(ctx)
 	if err != nil {
 		// Fallback: assume top of reserved region is current logical origin.
 		// Without DSR we cannot know absolute row; use 1 as last resort.
-		row, col = 1, 1
-		_ = col
+		row = 1
 	}
 
 	// If DSR says we don't fit, we've already scrolled via newlines; trust row.
