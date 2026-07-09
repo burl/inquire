@@ -54,7 +54,7 @@ jobs:
               .github/release/API_GUIDE.md.tmpl > RELEASE_NOTES.md
           cat RELEASE_NOTES.md
 
-       - name: Publish GitHub release
+      - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

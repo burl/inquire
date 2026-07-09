@@ -1,8 +1,11 @@
-# inquire
+# inquire (v2)
 
 Lightweight, **line-oriented** interactive CLI prompts for Go — an [inquirer.js](https://www.npmjs.com/package/inquirer)-style experience without taking over the full terminal.
 
 Each question renders as a small inline **band** at the current cursor. Answered prompts settle to static `✔ …` scrollback; the next question opens below. No alternate screen, no full-screen repaint.
+
+> **This repo is v2.** Import `github.com/burl/inquire/v2` — not `github.com/burl/inquire`.
+> The original v1 module (termbox-based) is frozen; see [Migration from v1](#migration-from-v1).
 
 ```bash
 go get github.com/burl/inquire/v2
@@ -10,7 +13,7 @@ go get github.com/burl/inquire/v2
 
 Requires **Go 1.26+**. Unix terminals (Linux, macOS, BSD) are supported; Windows is not in v2.0.
 
-**API docs:** [pkg.go.dev/github.com/burl/inquire/v2](https://pkg.go.dev/github.com/burl/inquire/v2) (indexed on tagged releases).
+**API docs:** [pkg.go.dev/github.com/burl/inquire/v2](https://pkg.go.dev/github.com/burl/inquire/v2) (indexed after a `v2.*` release tag is pushed).
 
 ## Quick start
 
@@ -171,21 +174,27 @@ task build:all   # cross-compile demos for linux+darwin (amd64+arm64)
 | [`ci.yml`](.github/workflows/ci.yml) | PRs to `master` / `develop` | `task check` (ubuntu + macos) + `task build:all` |
 | [`release.yml`](.github/workflows/release.yml) | Push to `master` | Same gate, then tags `v2.0.N` and publishes a short API guide |
 
+**To ship a release:** merge a green PR into `master`. The release workflow runs automatically (`v2.0.0` first, then `v2.0.1`, …). That tag is what pkg.go.dev and `go get` use — distinct from the `/v2` in the import path (see [Migration from v1](#migration-from-v1)).
+
 Enable branch protection on `master` and require the **ci** jobs (`check`, `build`) before merge.
 
 ## Migration from v1
 
-See [docs/MIGRATION.md](docs/MIGRATION.md).
+v1 used module path `github.com/burl/inquire` (termbox, global state, different API). v2 is a separate module with a `/v2` suffix per [Go module versioning](https://go.dev/doc/modules/version-numbers):
+
+| | v1 (frozen) | v2 (this branch) |
+|---|-------------|------------------|
+| Module | `github.com/burl/inquire` | `github.com/burl/inquire/v2` |
+| Import | `import "github.com/burl/inquire"` | `import "github.com/burl/inquire/v2"` |
+| Tags | `v0.x` on the old tree | `v2.0.x` on this tree |
+
+See [docs/MIGRATION.md](docs/MIGRATION.md) for API changes.
 
 ## How this differs from full-screen TUIs
 
 Libraries like Bubble Tea, huh, and tview assume an **application model**: alternate buffer, cleared screen, global event loop. That is the right fit for full dashboards and rich TUIs.
 
 **inquire** targets a narrower case: ask a few questions in the middle of an existing CLI, leave prior output in scrollback, and return control to the caller via `Run(ctx) error` — no `os.Exit`, no init panics.
-
-## v1
-
-The original module (`github.com/burl/inquire`, termbox-based) is frozen. It remains available via git history and existing tags if you need the legacy API.
 
 ## License
 
