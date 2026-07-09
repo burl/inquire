@@ -2,7 +2,7 @@
 # Print the next semantic version tag from conventional commits since the last tag.
 #
 # Bump rules (highest wins across the range):
-#   - breaking change  -> major  (type! / type(scope)! / BREAKING CHANGE: in body)
+#   - breaking change  -> major  (type! / type(scope)! / BREAKING CHANGE: or BREAKING-CHANGE: in body)
 #   - feat             -> minor
 #   - anything else    -> patch
 #
@@ -136,12 +136,12 @@ while true; do
   fi
 
   # Footer / body marker wins over subject type (Conventional Commits).
-  if [[ "$body" =~ BREAKING[[:space:]]CHANGE: ]]; then
+  if [[ "$body" =~ BREAKING([[:space:]]|-)CHANGE: ]]; then
     commit_level=2
     if [[ -n "$norm" ]]; then
-      reason="BREAKING CHANGE: footer (${norm})"
+      reason="breaking footer (${norm})"
     else
-      reason="BREAKING CHANGE: footer"
+      reason="breaking footer"
     fi
   fi
 

@@ -44,6 +44,9 @@ func TestApplyTabCompletion(t *testing.T) {
 	if ed.String() != "European" {
 		t.Fatalf("e => %q", ed.String())
 	}
+	if hint != "" {
+		t.Fatalf("hint %q want empty", hint)
+	}
 
 	ed.SetString("")
 	st.reset()
