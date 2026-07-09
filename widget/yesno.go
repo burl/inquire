@@ -1,97 +1,114 @@
 package widget
 
-import "github.com/burl/termbox-go"
+import (
+	"context"
 
-// YesNo an input widget, single line/string of text
+	"github.com/burl/inquire/v2/internal/termui"
+)
+
+// YesNo is a yes/no toggle prompt.
 type YesNo struct {
-	WBase
-	boundVar *bool
+	Base
+	value  *bool
+	prompt string
+	hint   string
 }
 
-// YesNoBoolVar - create new yes/no widget
-func YesNoBoolVar(value *bool, prompt string) *YesNo {
-	w := &YesNo{
-		WBase:    WBase{prompt: prompt, lines: 2, hint: "Yes/No"},
-		boundVar: value,
+// NewYesNo constructs a YesNo bound to value.
+func NewYesNo(value *bool, prompt string) *YesNo {
+	return &YesNo{
+		value:  value,
+		prompt: prompt,
+		hint:   "Yes/No",
 	}
-	w.Init()
+}
+
+// Hint sets hint text shown beside the prompt.
+func (w *YesNo) Hint(h string) *YesNo {
+	w.hint = h
 	return w
 }
 
-// Render YesNo widget
-func (w *YesNo) Render(flush func()) {
-	drawn := false
+// When registers a skip predicate.
+func (w *YesNo) When(fn func() bool) *YesNo {
+	w.Base.When(fn)
+	return w
+}
+
+// Run interactively collects a yes/no answer.
+func (w *YesNo) Run(ctx context.Context, scr *termui.Screen) error {
+	band, err := scr.OpenBand(ctx, 1)
+	if err != nil {
+		return err
+	}
+
 	answer := false
-	result := "No"
-	if w.boundVar != nil {
-		answer = *w.boundVar
+	if w.value != nil {
+		answer = *w.value
 	}
 
-	update := func() {
-		if w.boundVar != nil {
-			*w.boundVar = answer
-		}
-		if answer {
-			result = "Yes"
-		} else {
-			result = "No"
-		}
-	}
-
-	// draw a "phony cursor"
-	drawCursor := func(x, y int) {
-		tbPrint(x, y, termbox.ColorDefault|termbox.AttrReverse, termbox.ColorDefault, "\x20")
-	}
+	showHint := w.hint != ""
+	valueCol := 0
 
 	draw := func() {
-		drawn = true
-		update()
-		tbPrint(w.rightCol, 0, termbox.ColorCyan, coldef, result+"\x20\x20")
-		drawCursor(w.rightCol+len(result), 0)
+		band.Clear()
+		h := w.hint
+		if !showHint {
+			h = ""
+		}
+		valueCol = drawPromptRow(band, 0, w.prompt, h)
+		label := "No"
+		if answer {
+			label = "Yes"
+		}
+		used := writeStyled(band, valueCol, 0, label, styleAnswer)
+		band.SetCell(valueCol+used, 0, ' ', styleCursor)
+		_ = band.Flush()
 	}
+	draw()
 
-	w.drawPrompt()
-	drawCursor(w.rightCol, 0)
-	flush()
-
-EventLoop:
 	for {
-		ev := termbox.PollEvent()
-		switch ev.Type {
-		case termbox.EventKey:
-			if ev.Key == 0 {
-				switch ev.Ch {
-				case 'y', 'Y':
-					answer = true
-				case 'n', 'N':
-					answer = false
-				}
-			} else {
-				switch ev.Key {
-				case termbox.KeyBackspace2,
-					termbox.KeyBackspace,
-					termbox.KeyDelete,
-					termbox.KeySpace,
-					termbox.KeyTab:
-					answer = !answer
-				case termbox.KeyArrowLeft:
-					answer = false
-				case termbox.KeyArrowRight:
-					answer = true
-				case 3:
-					dieFromCtlc()
-				case 13:
-					if drawn {
-						break EventLoop
-					}
-				}
+		ev, err := PollKey(ctx, scr, band, draw)
+		if err != nil {
+			return err
+		}
+		if ev.Type != termui.EventKey {
+			continue
+		}
+		showHint = false
+
+		switch ev.Key {
+		case termui.KeyCtrlC:
+			return termui.ErrInterrupted
+		case termui.KeyEnter:
+			if w.value != nil {
+				*w.value = answer
+			}
+			label := "No"
+			if answer {
+				label = "Yes"
+			}
+			band.Clear()
+			drawSettledRow(band, 0, w.prompt, label, false, 0)
+			return band.FinalizeStatic(1)
+		case termui.KeyLeft, termui.KeyUp:
+			answer = false
+			draw()
+		case termui.KeyRight, termui.KeyDown:
+			answer = true
+			draw()
+		case termui.KeySpace, termui.KeyTab, termui.KeyBackspace, termui.KeyDelete:
+			answer = !answer
+			draw()
+		case termui.KeyRune:
+			switch ev.Rune {
+			case 'y', 'Y':
+				answer = true
+				draw()
+			case 'n', 'N':
+				answer = false
+				draw()
 			}
 		}
-		draw()
-		flush()
 	}
-
-	update()
-	w.drawResult(result)
-	flush()
 }

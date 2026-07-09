@@ -1,0 +1,38 @@
+## Install
+
+```bash
+go get github.com/burl/inquire/v2@${TAG}
+```
+
+Requires Go 1.26+. Unix TTY on stdin and stdout.
+
+## Quick start
+
+```go
+err := inquire.Query().
+    Input(&name, "what is your name", nil).
+    YesNo(&ok, "continue", nil).
+    Run(ctx)
+if errors.Is(err, inquire.ErrInterrupted) { /* Ctrl+C */ }
+```
+
+## Widgets
+
+`Input` · `YesNo` · `Menu` · `Select` · `Note` · `AnyKey` — configure in the `more` callback on each `Query()` step.
+
+```go
+inquire.Query().
+    Note("Bridge of Death", nil).
+    Menu(&quest, "your quest", func(w *widget.Menu) {
+        w.Item("grail", "find the grail")
+    }).
+    Input(&weight, "swallow weight", func(w *widget.Input) {
+        w.When(widget.WhenEqual(&quest, "nuts"))
+    })
+```
+
+## Docs
+
+- API reference: https://pkg.go.dev/github.com/burl/inquire/v2@${TAG}
+- Migration from v1: [docs/MIGRATION.md](https://github.com/${REPO}/blob/${TAG}/docs/MIGRATION.md)
+- Interactive demo: `task demo` (Monty Python grail quest)

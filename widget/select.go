@@ -1,153 +1,161 @@
 package widget
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
-	"github.com/burl/termbox-go"
+	"github.com/burl/inquire/v2/internal/termui"
 )
 
-// strings for decorating select menu
-const (
-	StrSelectItemCursor    = string(CharChevronRight)
-	StrSelectItemUnChecked = string(CharCircle)
-	StrSelectItemChecked   = string(CharCircleFilled)
-	// StrSelectItemCursor = "➤"
-	//StrSelectItemCursor = "\u261e"
-	// StrSelectItemUnChecked = "▢"
-	// StrSelectItemChecked   = "\u2713"
-)
-
-// SelectableItem - a selectable item, bound to a bool var
-type SelectableItem struct {
-	Selected *bool
-	Name     string
+type selectItem struct {
+	selected *bool
+	name     string
 }
 
-// Select an input widget, single line/string of text
+// Select is a vertical multi-select checkbox prompt.
 type Select struct {
-	WBase
-	Items []SelectableItem
+	Base
+	prompt     string
+	hint       string
+	items      []selectItem
+	proxyBools []bool
 }
 
-// WSelect - create new input widget
-func WSelect(prompt string, items []SelectableItem) *Select {
-	proxy := make([]SelectableItem, len(items))
-	proxyBools := make([]bool, len(items))
-	for i, item := range items {
-		proxy[i].Name = item.Name
-		proxy[i].Selected = item.Selected
-		if proxy[i].Selected == nil {
-			proxy[i].Selected = &proxyBools[i]
-		}
-	}
-	w := &Select{
-		WBase: WBase{prompt: prompt, lines: 2 + len(items)},
-		Items: proxy,
-	}
-	w.Init()
+// NewSelect constructs a Select group.
+func NewSelect(prompt string) *Select {
+	return &Select{prompt: prompt}
+}
+
+// Hint sets hint text shown beside the prompt.
+func (w *Select) Hint(h string) *Select {
+	w.hint = h
 	return w
 }
 
-// SelectGroup - select group
-func SelectGroup(prompt string, items ...SelectableItem) *Select {
-	return WSelect(prompt, items)
-}
-
-// Item - add an item to the menu
-func (w *Select) Item(value *bool, prompt string) *Select {
-	w.lines = w.lines + 1
-	w.Items = append(w.Items, SelectItemBoolVar(value, prompt))
+// When registers a skip predicate.
+func (w *Select) When(fn func() bool) *Select {
+	w.Base.When(fn)
 	return w
 }
 
-// SelectItemBoolVar - return item
-func SelectItemBoolVar(bound *bool, name string) SelectableItem {
-	return SelectableItem{bound, name}
+// Item appends a checkbox entry bound to value.
+func (w *Select) Item(value *bool, name string) {
+	if value == nil {
+		w.proxyBools = append(w.proxyBools, false)
+		value = &w.proxyBools[len(w.proxyBools)-1]
+	}
+	w.items = append(w.items, selectItem{selected: value, name: name})
 }
 
-// DoValidate validation routine
-func (w *Select) DoValidate() (msg string) {
-	return "validation failed"
-}
-
-func (w *Select) selectList() (list []string) {
-	for _, choice := range w.Items {
-		if *choice.Selected {
-			list = append(list, choice.Name)
+func (w *Select) selectedNames() string {
+	var names []string
+	for _, it := range w.items {
+		if it.selected != nil && *it.selected {
+			names = append(names, it.name)
 		}
 	}
-	return
+	if len(names) == 0 {
+		return "(none)"
+	}
+	return strings.Join(names, ", ")
 }
 
-// function to draw items
-func (w *Select) drawItem(item int, active bool) {
-	cursor := " "
-	if active {
-		cursor = StrSelectItemCursor
-	}
-	radio := StrSelectItemUnChecked
-	if *w.Items[item].Selected {
-		radio = StrSelectItemChecked
-	}
-	str := fmt.Sprintf("%s %s %s", cursor, radio, w.Items[item].Name)
-	color := coldef
-	if active {
-		color = termbox.ColorCyan
-	}
-	tbPrint(0, 1+item, color, coldef, str)
-}
-
-func (w *Select) draw() {
-	w.drawPrompt()
-	for i := 0; i < len(w.Items); i++ {
-		if i == 0 {
-			w.drawItem(i, true)
-		} else {
-			w.drawItem(i, false)
+func (w *Select) drawItems(band *termui.Band, cur int) {
+	for i, it := range w.items {
+		cursor := " "
+		if i == cur {
+			cursor = charChevronRight
 		}
+		mark := charCircle
+		if it.selected != nil && *it.selected {
+			mark = charCircleFilled
+		}
+		st := termui.Style{}
+		if i == cur {
+			st = styleActive
+		}
+		band.WriteString(0, 1+i, cursor+" "+mark+" "+it.name, st)
 	}
 }
 
-// Render Select widget
-func (w *Select) Render(flush func()) {
-	curItem := 0
+// Run interactively collects checkbox selections.
+func (w *Select) Run(ctx context.Context, scr *termui.Screen) error {
+	if len(w.items) == 0 {
+		return fmt.Errorf("inquire: select has no items")
+	}
 
-	w.draw()
-	flush()
+	lines := 1 + len(w.items) + 1 // prompt + items + footer
+	band, err := scr.OpenBand(ctx, lines)
+	if err != nil {
+		return err
+	}
 
-	// get input, draw/re draw menu, items
-EventLoop:
+	cur := 0
+	showHint := w.hint != ""
+
+	draw := func() {
+		band.Clear()
+		h := w.hint
+		if !showHint {
+			h = ""
+		}
+		_ = drawPromptRow(band, 0, w.prompt, h)
+		w.drawItems(band, cur)
+		drawFooter(band, lines-1, footerSelect)
+		_ = band.Flush()
+	}
+	draw()
+
 	for {
-		ev := termbox.PollEvent()
-		switch ev.Type {
-		case termbox.EventKey:
-			switch ev.Key {
-			case 3:
-				dieFromCtlc()
-			case 13:
-				break EventLoop
-			case termbox.KeySpace, 9, termbox.KeyArrowLeft, termbox.KeyArrowRight:
-				*w.Items[curItem].Selected = !*w.Items[curItem].Selected
-				w.drawItem(curItem, true)
-			case termbox.KeyArrowUp:
-				if curItem > 0 {
-					w.drawItem(curItem, false)
-					curItem = curItem - 1
-					w.drawItem(curItem, true)
+		ev, err := PollKey(ctx, scr, band, draw)
+		if err != nil {
+			return err
+		}
+		if ev.Type != termui.EventKey {
+			continue
+		}
+		showHint = false
+
+		switch ev.Key {
+		case termui.KeyCtrlC:
+			return termui.ErrInterrupted
+		case termui.KeyEnter:
+			band.Clear()
+			drawSettledRow(band, 0, w.prompt, w.selectedNames(), false, 0)
+			return band.FinalizeStatic(1)
+		case termui.KeyUp:
+			if cur > 0 {
+				cur--
+				draw()
+			}
+		case termui.KeyDown:
+			if cur < len(w.items)-1 {
+				cur++
+				draw()
+			}
+		case termui.KeySpace, termui.KeyTab:
+			if w.items[cur].selected != nil {
+				*w.items[cur].selected = !*w.items[cur].selected
+			}
+			draw()
+		case termui.KeyRune:
+			switch ev.Rune {
+			case 'a', 'A':
+				for i := range w.items {
+					if w.items[i].selected != nil {
+						*w.items[i].selected = true
+					}
 				}
-			case termbox.KeyArrowDown:
-				if curItem < len(w.Items)-1 {
-					w.drawItem(curItem, false)
-					curItem = curItem + 1
-					w.drawItem(curItem, true)
+				draw()
+			case 'i', 'I':
+				for i := range w.items {
+					if w.items[i].selected != nil {
+						*w.items[i].selected = !*w.items[i].selected
+					}
 				}
+				draw()
 			}
 		}
-		w.ClearHint()
-		flush()
 	}
-
-	w.drawResult(strings.Join(w.selectList(), ", "))
-	flush()
 }

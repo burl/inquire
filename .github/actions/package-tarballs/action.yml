@@ -1,0 +1,57 @@
+name: Package release tarballs
+description: |
+  Create per-platform .tar.gz archives and sha256sums.txt from task build:all output
+  under build.out/<binary>/<os>_<arch>/.
+
+inputs:
+  binary:
+    description: Binary name
+    required: false
+    default: inquire-grail
+  version:
+    description: Official release version string
+    required: true
+  dist-dir:
+    description: Output directory (relative to workspace root)
+    required: false
+    default: dist/inquire
+
+outputs:
+  dist_dir:
+    description: Absolute path to the dist directory
+    value: ${{ steps.package.outputs.dist_dir }}
+  checksums_file:
+    description: Path to sha256sums.txt
+    value: ${{ steps.package.outputs.checksums_file }}
+
+runs:
+  using: composite
+  steps:
+    - id: package
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "${{ github.workspace }}"
+
+        BIN="${{ inputs.binary }}"
+        VER="${{ inputs.version }}"
+        DIST="${GITHUB_WORKSPACE}/${{ inputs.dist-dir }}"
+        mkdir -p "${DIST}"
+
+        for OS in linux darwin; do
+          for ARCH in amd64 arm64; do
+            SRC="build.out/${BIN}/${OS}_${ARCH}/${BIN}"
+            if [[ ! -f "${SRC}" ]]; then
+              echo "missing build artifact: ${SRC}" >&2
+              exit 1
+            fi
+            TB="${DIST}/${BIN}_${VER}_${OS}_${ARCH}.tar.gz"
+            tar -czf "${TB}" -C "build.out/${BIN}/${OS}_${ARCH}" "${BIN}"
+            echo "  → $(basename "${TB}")"
+          done
+        done
+
+        (cd "${DIST}" && sha256sum ./*.tar.gz > sha256sums.txt)
+
+        echo "dist_dir=${DIST}" >> "$GITHUB_OUTPUT"
+        echo "checksums_file=${DIST}/sha256sums.txt" >> "$GITHUB_OUTPUT"

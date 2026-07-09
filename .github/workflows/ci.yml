@@ -1,0 +1,45 @@
+# Gate pull requests and non-master pushes.
+# Required checks: task check + task build:all
+
+name: ci
+
+on:
+  pull_request:
+    branches:
+      - master
+      - develop
+  push:
+    branches-ignore:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Check
+        run: task check
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Go environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: Build all platforms
+        run: task build:all

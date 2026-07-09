@@ -1,0 +1,104 @@
+version: '3'
+
+env:
+  CGO_ENABLED: 0
+
+vars:
+  REPO_ROOT:
+    sh: git rev-parse --show-toplevel 2>/dev/null || pwd
+
+  BUILD_OUT: "{{.REPO_ROOT}}/build.out"
+  BIN_OUT: "{{.REPO_ROOT}}/bin.out"
+
+  GO_MODULE_DIRS: .
+  GO_SOURCE_DIRS: ./...
+
+  PKG_GRAIL: ./demo/grail.go
+  BIN_GRAIL: inquire-grail
+
+  PKG_TERMUI: ./demo/termui
+  BIN_TERMUI: inquire-termui
+
+includes:
+  go:
+    taskfile: ./tasks/sdlc/go.yaml
+
+tasks:
+
+  default:
+    desc: List tasks
+    cmds:
+    - task --list
+
+  clean:
+    desc: Remove build.out/ and bin.out/
+    cmds:
+    - rm -rf "{{.BUILD_OUT}}" "{{.BIN_OUT}}"
+    - echo "✓ cleaned {{.BUILD_OUT}} and {{.BIN_OUT}}"
+
+  build:
+    desc: Build inquire-grail for the current host
+    cmds:
+    - task: go:.build-bin-host
+      vars:
+        PKG: "{{.PKG_GRAIL}}"
+        BIN: "{{.BIN_GRAIL}}"
+
+  build:grail:
+    desc: Cross-compile inquire-grail for linux+darwin (amd64+arm64)
+    cmds:
+    - task: go:.build-bin-all
+      vars:
+        PKG: "{{.PKG_GRAIL}}"
+        BIN: "{{.BIN_GRAIL}}"
+
+  build:termui:
+    desc: Cross-compile inquire-termui for linux+darwin (amd64+arm64)
+    cmds:
+    - task: go:.build-bin-all
+      vars:
+        PKG: "{{.PKG_TERMUI}}"
+        BIN: "{{.BIN_TERMUI}}"
+
+  build:all:
+    desc: Cross-compile all demo binaries for linux+darwin (amd64+arm64)
+    cmds:
+    - task: build:grail
+    - task: build:termui
+
+  test:
+    desc: Run all tests
+    cmds:
+    - task: go:test
+
+  vet:
+    desc: Run go vet
+    cmds:
+    - task: go:vet
+
+  fmt:
+    desc: Format Go sources
+    cmds:
+    - task: go:fmt
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+    - task: go:lint
+
+  check:
+    desc: Run vet, test, and lint (CI-friendly)
+    silent: true
+    cmds:
+    - task: go:check-taskfile
+    - task: go:check
+
+  demo:
+    desc: Run the grail interactive demo
+    cmds:
+    - go run ./demo/grail.go
+
+  demo:termui:
+    desc: Run the termui band demo
+    cmds:
+    - go run ./demo/termui

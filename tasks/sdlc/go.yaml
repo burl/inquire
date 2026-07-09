@@ -1,0 +1,197 @@
+# tasks/sdlc/go.yaml
+#
+# Reusable Go build, test, and lint tasks. Include from the root Taskfile:
+#
+#   includes:
+#     go:
+#       taskfile: ./tasks/sdlc/go.yaml
+#
+# Public build tasks (internal — call via vars PKG and BIN):
+#   .build-bin-host   Build for current host + symlink in bin.out/
+#   .build-bin-all    Cross-compile linux+darwin (amd64+arm64)
+#
+# Public quality tasks:
+#   check, test, vet, fmt, lint, tidy, info
+
+version: '3'
+
+vars:
+  GO: go
+  IN_CI:
+    sh: '[[ -n "${CI:-}" ]] && echo "true" || echo "false"'
+
+tasks:
+
+  check-taskfile:
+    desc: Check the taskfile env for sanity
+    silent: true
+    cmds:
+    - |
+      rc=0
+      function fail() {
+        echo "❌ go:check-taskfile failed: $@"
+        rc=1
+      }
+      function warn() {
+        echo "⚠️ go:check-taskfile warning: $@"
+      }
+      [[ -z "{{ .GOOS }}" ]] || warn "GOOS should not be defined globally in the calling Taskfile"
+      [[ -z "{{ .GOARCH }}" ]] || warn "GOARCH should not be defined globally in the calling Taskfile"
+      [[ -z "{{ .PKG }}" ]] || warn "PKG should not be defined globally in the calling Taskfile"
+      [[ -z "{{ .BIN }}" ]] || warn "BIN should not be defined globally in the calling Taskfile"
+      [[ -z "{{ .EXTRA_LDFLAGS }}" ]] || warn "EXTRA_LDFLAGS should not be defined globally in the calling Taskfile"
+      [[ -z "{{ .EXTRA_ARGS }}" ]] || warn "EXTRA_ARGS should not be defined globally in the calling Taskfile"
+      [[ -n "{{ .BUILD_OUT }}" ]] || fail "BUILD_OUT must be defined globally in the calling Taskfile"
+      [[ -n "{{ .BIN_OUT }}" ]] || fail "BIN_OUT must be defined globally in the calling Taskfile"
+      [[ -n "{{ .GO_MODULE_DIRS }}" ]] || fail "GO_MODULE_DIRS must be defined globally in the calling Taskfile"
+      [[ -n "{{ .GO_SOURCE_DIRS }}" ]] || fail "GO_SOURCE_DIRS must be defined globally in the calling Taskfile"
+      [[ -z "{{ .TAGS }}" ]] || fail "TAGS must not be defined globally in the calling Taskfile"
+      [[ -z "{{ .LDFLAGS }}" ]] || fail "LDFLAGS must not be defined globally in the calling Taskfile"
+      exit $rc
+
+  .build-bin-platform:
+    internal: true
+    silent: true
+    desc: Build one specific platform (internal reusable task)
+    requires:
+      vars: [GOOS, GOARCH, PKG, BIN]
+    vars:
+      PLATFORM: "{{.GOOS}}_{{.GOARCH}}"
+      DEST_DIR: "{{.BUILD_OUT}}/{{.BIN}}/{{.PLATFORM}}"
+      DEST: "{{.DEST_DIR}}/{{.BIN}}"
+      LDFLAGS: '{{ coalesce .LDFLAGS .GO_LDFLAGS "" }}'
+      TAGS: '{{ coalesce .TAGS "" }}'
+      EXTRA_LDFLAGS: '{{ coalesce .EXTRA_LDFLAGS "" }}'
+      EXTRA_ARGS: '{{ coalesce .EXTRA_ARGS "" }}'
+    cmds:
+    - install -d -m 0755 "{{.DEST_DIR}}"
+    - |
+      TAGS_ARG=""
+      if [ -n "{{.TAGS}}" ]; then
+        TAGS_ARG="-tags={{.TAGS}}"
+      fi
+
+      echo "→ Building {{.BIN}} ({{.PLATFORM}}) → {{.DEST}}"
+      GOOS="{{.GOOS}}" GOARCH="{{.GOARCH}}" {{.GO}} build \
+        -trimpath \
+        ${TAGS_ARG} \
+        {{.EXTRA_ARGS}} \
+        -ldflags "{{.LDFLAGS}} {{.EXTRA_LDFLAGS}}" \
+        -o "{{.DEST}}" \
+        {{.PKG}}
+    - |
+      HOST_GOOS=$(unset GOOS GOARCH; {{.GO}} env GOOS)
+      HOST_GOARCH=$(unset GOOS GOARCH; {{.GO}} env GOARCH)
+      if [ "{{.GOOS}}" = "$HOST_GOOS" ] && [ "{{.GOARCH}}" = "$HOST_GOARCH" ]; then
+        install -d -m 0755 "{{.BIN_OUT}}"
+        ln -sfn "../build.out/{{.BIN}}/{{.PLATFORM}}/{{.BIN}}" "{{.BIN_OUT}}/{{.BIN}}"
+        echo "   ✓ host symlink in bin.out/"
+      fi
+
+  .build-bin-host:
+    internal: true
+    silent: true
+    desc: Build for current host + create bin.out/ symlink
+    requires:
+      vars: [PKG, BIN]
+    cmds:
+    - task: .build-bin-platform
+      vars:
+        GOOS:
+          sh: "unset GOOS GOARCH; {{.GO}} env GOOS"
+        GOARCH:
+          sh: "unset GOOS GOARCH; {{.GO}} env GOARCH"
+        PKG: "{{.PKG}}"
+        BIN: "{{.BIN}}"
+        LDFLAGS: '{{ coalesce .LDFLAGS .GO_LDFLAGS "" }}'
+        TAGS: '{{ coalesce .TAGS "" }}'
+        EXTRA_LDFLAGS: '{{ coalesce .EXTRA_LDFLAGS "" }}'
+        EXTRA_ARGS: '{{ coalesce .EXTRA_ARGS "" }}'
+
+  .build-bin-all:
+    internal: true
+    silent: true
+    desc: Cross-compile for linux+darwin (amd64+arm64)
+    requires:
+      vars: [PKG, BIN]
+    cmds:
+    - echo "→ Cross-building {{.BIN}} for linux+darwin..."
+    - for:
+        matrix:
+          GOOS: [linux, darwin]
+          GOARCH: [amd64, arm64]
+      task: .build-bin-platform
+      vars:
+        GOOS: '{{ .ITEM.GOOS }}'
+        GOARCH: '{{.ITEM.GOARCH}}'
+        PKG: '{{.PKG}}'
+        BIN: '{{.BIN}}'
+        LDFLAGS: '{{ coalesce .LDFLAGS .GO_LDFLAGS "" }}'
+        TAGS: '{{ coalesce .TAGS "" }}'
+        EXTRA_LDFLAGS: '{{ coalesce .EXTRA_LDFLAGS "" }}'
+        EXTRA_ARGS: '{{ coalesce .EXTRA_ARGS "" }}'
+    - echo "✓ All builds for {{.BIN}} complete under {{.BUILD_OUT}}/"
+
+  check:
+    desc: Run vet + test + lint
+    silent: true
+    cmds:
+    - task: vet
+    - task: test
+    - task: lint
+
+  test:
+    desc: Test all packages
+    silent: true
+    cmds:
+    - |
+      echo "→ test: running tests on {{ .GO_SOURCE_DIRS }}"
+      {{ .GO }} test {{ .CLI_ARGS }} -count=1 {{ .GO_SOURCE_DIRS }}
+
+  vet:
+    desc: Vet all sources
+    silent: true
+    cmds:
+    - |
+      echo "→ vet: running vet on {{ .GO_SOURCE_DIRS }}"
+      {{ .GO }} vet {{ .GO_SOURCE_DIRS }}
+
+  fmt:
+    desc: Format all Go sources
+    silent: true
+    cmds:
+    - |
+      echo "→ fmt: formatting {{ .GO_SOURCE_DIRS }}"
+      {{ .GO }} fmt {{ .GO_SOURCE_DIRS }}
+
+  lint:
+    desc: Lint all Go sources
+    silent: true
+    cmds:
+    - |
+      echo "→ lint: running checks on {{ .GO_SOURCE_DIRS }}"
+      if golangci-lint run {{ .GO_SOURCE_DIRS }}; then
+        echo "✅ lint: all checks passed"
+        exit 0
+      else
+        echo "❌ lint: one or more checks failed"
+        exit 1
+      fi
+
+  tidy:
+    desc: Run go mod tidy across all modules
+    silent: true
+    cmds:
+    - for:
+        var: GO_MODULE_DIRS
+        split: ' '
+        as: MODULE
+      cmd: '{{ .GO }} -C {{ .MODULE }} mod tidy'
+
+  info:
+    desc: Show Go source and module paths
+    silent: true
+    cmds:
+    - |
+      echo 'GO_MODULE_DIRS: {{ .GO_MODULE_DIRS }}'
+      echo 'GO_SOURCE_DIRS: {{ .GO_SOURCE_DIRS }}'
