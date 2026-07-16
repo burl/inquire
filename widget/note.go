@@ -2,17 +2,19 @@ package widget
 
 import (
 	"context"
+	"strings"
 
 	"github.com/burl/inquire/v2/internal/termui"
 )
 
-// Note is a non-interactive message shown before the next prompt.
+// Note is a non-interactive message printed before the next prompt.
 type Note struct {
 	Base
 	text string
 }
 
 // NewNote constructs a Note with the given text.
+// Use embedded newlines for multiple lines.
 func NewNote(text string) *Note {
 	return &Note{text: text}
 }
@@ -23,38 +25,31 @@ func (w *Note) When(fn func() bool) *Note {
 	return w
 }
 
-// Run displays the note and waits for Enter.
+// Run prints the note and continues immediately.
 func (w *Note) Run(ctx context.Context, scr *termui.Screen) error {
-	band, err := scr.OpenBand(ctx, 1)
+	lines := noteLines(w.text)
+	band, err := scr.OpenBand(ctx, len(lines))
 	if err != nil {
 		return err
 	}
 
-	draw := func() {
-		band.Clear()
-		band.WriteString(0, 0, "› ", stylePrompt)
-		band.WriteString(2, 0, w.text, termui.Style{Faint: true})
-		_ = band.Flush()
+	faint := termui.Style{Faint: true}
+	for y, line := range lines {
+		if y == 0 {
+			band.WriteString(0, y, "› ", stylePrompt)
+		}
+		band.WriteString(2, y, line, faint)
 	}
-	draw()
-
-	for {
-		ev, err := PollKey(ctx, scr, band, draw)
-		if err != nil {
-			return err
-		}
-		if ev.Type != termui.EventKey {
-			continue
-		}
-
-		switch ev.Key {
-		case termui.KeyCtrlC:
-			return termui.ErrInterrupted
-		case termui.KeyEnter:
-			band.Clear()
-			band.WriteString(0, 0, "› ", stylePrompt)
-			band.WriteString(2, 0, w.text, termui.Style{Faint: true})
-			return band.FinalizeStatic(1)
-		}
+	if err := band.Flush(); err != nil {
+		return err
 	}
+	return band.FinalizeStatic(len(lines))
+}
+
+func noteLines(text string) []string {
+	text = strings.TrimRight(text, "\n")
+	if text == "" {
+		return []string{""}
+	}
+	return strings.Split(text, "\n")
 }

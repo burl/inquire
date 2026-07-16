@@ -247,8 +247,7 @@ func (b *Band) FlushLines(n int) error {
 	return cup(b.screen.out, b.origin+n-1, 1)
 }
 
-// Close leaves the band content in scrollback by moving the cursor just
-// below the band. Does not clear the painted cells.
+// Close parks the cursor on the line below the band. Does not clear painted cells.
 func (b *Band) Close() error {
 	return b.closeAfter(b.lines)
 }
@@ -261,18 +260,19 @@ func (b *Band) closeAfter(visibleLines int) error {
 		visibleLines = 1
 	}
 	b.closed = true
-	row := b.origin + visibleLines
-	if err := cup(b.screen.out, row, 1); err != nil {
-		return err
-	}
-	if err := clearLine(b.screen.out); err != nil {
+	// Newline from the last settled row commits it to terminal scrollback.
+	// Parking on the cleared line below (old behavior) left CUP-painted rows
+	// uncommitted; a later OpenBand scroll could erase them from history.
+	lastRow := b.origin + visibleLines - 1
+	if err := cup(b.screen.out, lastRow, 1); err != nil {
 		return err
 	}
 	return newline(b.screen.out)
 }
 
 // FinalizeStatic settles the band to keepLines of content, erases any extra
-// interactive rows on the terminal, and parks the cursor on the next line.
+// interactive rows on the terminal, commits the settled rows to scrollback,
+// and parks the cursor on the line below for the next OpenBand.
 func (b *Band) FinalizeStatic(keepLines int) error {
 	if keepLines < 1 {
 		keepLines = 1

@@ -93,7 +93,7 @@ func (s *Session) Select(prompt string, more func(*widget.Select)) *Session {
 	return s
 }
 
-// Note adds a non-interactive message; the user presses Enter to continue.
+// Note adds a non-interactive message printed before the next prompt.
 func (s *Session) Note(text string, more func(*widget.Note)) *Session {
 	w := widget.NewNote(text)
 	if more != nil {
