@@ -264,7 +264,17 @@ func TestNoteRun(t *testing.T) {
 	ctx := t.Context()
 	n := widget.NewNote("hello")
 
-	fake := openFake(t, termui.CursorReport(5, 1), termui.KeyEnter)
+	fake := openFake(t, termui.CursorReport(5, 1))
+	if err := n.Run(ctx, fake.Screen); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNoteMultiline(t *testing.T) {
+	ctx := t.Context()
+	n := widget.NewNote("line one\nline two")
+
+	fake := openFake(t, termui.CursorReport(5, 1))
 	if err := n.Run(ctx, fake.Screen); err != nil {
 		t.Fatal(err)
 	}
