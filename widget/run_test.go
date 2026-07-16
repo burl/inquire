@@ -125,6 +125,65 @@ func TestMenuNavigateCtrlN(t *testing.T) {
 	}
 }
 
+func TestInputTabComplete(t *testing.T) {
+	ctx := t.Context()
+	var got string
+	in := widget.NewInput(&got, "swallow")
+	in.Complete(widget.CompleteFrom([]string{"African", "European"}))
+
+	fake := openFake(t,
+		termui.CursorReport(5, 1),
+		'A', termui.KeyTab,
+		termui.KeyEnter,
+	)
+	if err := in.Run(ctx, fake.Screen); err != nil {
+		t.Fatal(err)
+	}
+	if got != "African" {
+		t.Fatalf("got %q want African", got)
+	}
+}
+
+func TestInputTabCompleteCycle(t *testing.T) {
+	ctx := t.Context()
+	var got string
+	in := widget.NewInput(&got, "knight")
+	in.Complete(widget.CompleteFrom([]string{"Sir Galahad", "Sir Lancelot"}))
+
+	fake := openFake(t,
+		termui.CursorReport(5, 1),
+		'S', 'i', 'r', ' ',
+		termui.KeyTab, termui.KeyTab,
+		termui.KeyEnter,
+	)
+	if err := in.Run(ctx, fake.Screen); err != nil {
+		t.Fatal(err)
+	}
+	if got != "Sir Lancelot" {
+		t.Fatalf("got %q want Sir Lancelot", got)
+	}
+}
+
+func TestInputMaskedIgnoresTab(t *testing.T) {
+	ctx := t.Context()
+	var got string
+	in := widget.NewInput(&got, "secret")
+	in.MaskInput()
+
+	fake := openFake(t,
+		termui.CursorReport(5, 1),
+		's', 'h', 'h',
+		termui.KeyTab, termui.KeyTab,
+		termui.KeyEnter,
+	)
+	if err := in.Run(ctx, fake.Screen); err != nil {
+		t.Fatal(err)
+	}
+	if got != "shh" {
+		t.Fatalf("got %q want shh (tab must not insert spaces)", got)
+	}
+}
+
 func TestInputEmacsEditing(t *testing.T) {
 	ctx := t.Context()
 	var got string

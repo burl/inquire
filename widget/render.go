@@ -57,6 +57,11 @@ func drawErrorRow(band *termui.Band, y int, msg string) {
 	band.WriteString(2, y, "error: "+msg, termui.Style{})
 }
 
+// drawHintRow paints a faint secondary hint on row y.
+func drawHintRow(band *termui.Band, y int, msg string) {
+	band.WriteString(0, y, msg, styleHint)
+}
+
 func writeStyled(band *termui.Band, x, y int, s string, st termui.Style) int {
 	band.WriteString(x, y, s, st)
 	return runewidth.StringWidth(s)
