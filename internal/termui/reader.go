@@ -14,6 +14,14 @@ import (
 // Go's netpoller, so read deadlines don't apply to it; a loop parked in Read
 // would outlive Close and steal the next Screen's input (cursor position
 // reports, keys). select, unlike poll on macOS, works with tty devices.
+//
+// A signal interrupts select with EINTR and leaves the fd sets as they were
+// passed in, so the sets are read only after a successful select. The loop
+// returns quietly only on Close; any other exit delivers an error, so Poll
+// fails instead of waiting forever with nobody reading the terminal.
+
+// selectFn is unix.Select; tests replace it.
+var selectFn = unix.Select
 
 func (s *Screen) startReader() error {
 	r, w, err := os.Pipe()
@@ -51,15 +59,23 @@ func (s *Screen) readLoop(ctx context.Context, wakeFd int) {
 		var fds unix.FdSet
 		fds.Set(s.fdIn)
 		fds.Set(wakeFd)
-		_, err := unix.Select(nfd, &fds, nil, nil, nil)
-		if ctx.Err() != nil || fds.IsSet(wakeFd) {
-			return
-		}
+		_, err := selectFn(nfd, &fds, nil, nil, nil)
 		if errors.Is(err, unix.EINTR) {
+			if ctx.Err() != nil {
+				return
+			}
 			continue
 		}
 		if err != nil {
 			s.deliver(ctx, readResult{err: fmt.Errorf("termui: select: %w", err)})
+			return
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		if fds.IsSet(wakeFd) {
+			// Only Close writes the wake byte, after cancelling ctx.
+			s.deliver(ctx, readResult{err: ErrClosed})
 			return
 		}
 		if !fds.IsSet(s.fdIn) {
