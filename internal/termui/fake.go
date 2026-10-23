@@ -2,7 +2,6 @@ package termui
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -81,7 +80,6 @@ func (f *Fake) Output() string {
 }
 
 func newTestScreen(in, out *os.File, cols, rows int) *Screen {
-	ctx, cancel := context.WithCancel(context.Background())
 	s := &Screen{
 		in:           in,
 		out:          out,
@@ -92,9 +90,10 @@ func newTestScreen(in, out *os.File, cols, rows int) *Screen {
 		colorEnabled: false,
 		readCh:       make(chan readResult, 8),
 		winchCh:      make(chan os.Signal, 1),
-		stopRead:     cancel,
 	}
-	go s.readLoop(ctx)
+	if err := s.startReader(); err != nil {
+		panic(err)
+	}
 	return s
 }
 

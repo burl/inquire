@@ -44,6 +44,10 @@ type Screen struct {
 	readCh   chan readResult
 	winchCh  chan os.Signal
 	stopRead context.CancelFunc
+	// wakeR/wakeW wake the read loop's select on Close; readDone closes
+	// when the loop has returned.
+	wakeR, wakeW *os.File
+	readDone     chan struct{}
 }
 
 type readResult struct {
@@ -117,11 +121,12 @@ func OpenScreen(in, out *os.File, opts ...ScreenOption) (*Screen, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	s.stopRead = cancel
 	signal.Notify(s.winchCh, syscall.SIGWINCH)
-	go s.readLoop(ctx)
-
+	if err := s.startReader(); err != nil {
+		signal.Stop(s.winchCh)
+		_ = s.restore()
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -159,9 +164,7 @@ func (s *Screen) Close() error {
 	s.closed = true
 	s.mu.Unlock()
 
-	if s.stopRead != nil {
-		s.stopRead()
-	}
+	s.stopReader()
 	signal.Stop(s.winchCh)
 	return s.restore()
 }
@@ -176,39 +179,6 @@ func (s *Screen) Size() (cols, rows int) {
 // ColorEnabled reports whether ANSI colors will be emitted.
 func (s *Screen) ColorEnabled() bool {
 	return s.colorEnabled
-}
-
-func (s *Screen) readLoop(ctx context.Context) {
-	buf := make([]byte, 256)
-	for {
-		// Set a short deadline so we can notice cancel.
-		_ = s.in.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-		n, err := s.in.Read(buf)
-		if n > 0 {
-			cp := make([]byte, n)
-			copy(cp, buf[:n])
-			select {
-			case s.readCh <- readResult{data: cp}:
-			case <-ctx.Done():
-				return
-			}
-		}
-		if err != nil {
-			if errors.Is(err, os.ErrDeadlineExceeded) {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					continue
-				}
-			}
-			select {
-			case s.readCh <- readResult{err: err}:
-			case <-ctx.Done():
-			}
-			return
-		}
-	}
 }
 
 func (s *Screen) refreshSize() {
